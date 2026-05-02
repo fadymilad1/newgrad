@@ -166,7 +166,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ userType, isOpen = true, onClo
           { label: 'Templates', icon: <FiLayout />, href: '/dashboard/pharmacy/templates' },
         ]
       : []),
-    { label: 'Business Info', icon: <FiInfo />, href: '/dashboard/business-info' },
+    ...(currentUserType === 'pharmacy'
+      ? [{ label: 'Business Info', icon: <FiInfo />, href: '/dashboard/business-info' }]
+      : []),
     {
       label: currentUserType === 'pharmacy' ? 'Orders' : 'Appointments',
       icon: <FiShoppingCart />,

@@ -233,7 +233,9 @@ export default function DashboardPage() {
             // Avoids overwriting the setup form feature flags with raw DB fields
             const existing = getScopedItem('selectedFeatures')
             if (!existing) {
-              setSelectedFeatures({ _fromBackend: true })
+              // Profile exists, but feature flags might not be stored locally on this device.
+              // Keep this as an empty object so the UI doesn't render a confusing placeholder chip.
+              setSelectedFeatures({})
             } else {
               setSelectedFeatures(JSON.parse(existing))
             }
@@ -242,6 +244,26 @@ export default function DashboardPage() {
         .catch(() => {})
     }
   }, [router])
+
+  const hiddenFeatureKeys = new Set([
+    'departments',
+    'bookingSystem',
+    'bookingUrl',
+    'phone',
+    'email',
+    'address',
+  ])
+
+  const displaySelectedFeatures: Array<[string, unknown]> =
+    userType === 'hospital' && selectedFeatures && typeof selectedFeatures === 'object'
+      ? Object.entries(selectedFeatures).filter(([key, value]) => {
+          if (!value) return false
+          if (hiddenFeatureKeys.has(key)) return false
+          // Hide internal/meta keys (e.g. historical placeholders)
+          if (key.startsWith('_')) return false
+          return true
+        })
+      : []
 
   // Refresh pharmacy order stats when page gains focus (e.g. after placing order or visiting Orders page)
   useEffect(() => {
@@ -431,20 +453,15 @@ export default function DashboardPage() {
               </span>
             </div>
           </div>
-          {userType === 'hospital' && selectedFeatures && (
+          {userType === 'hospital' && displaySelectedFeatures.length > 0 && (
             <div className="mt-4 pt-4 border-t border-neutral-border">
               <p className="text-sm font-medium text-neutral-dark mb-2">Selected Features:</p>
               <div className="flex flex-wrap gap-2">
-                {Object.entries(selectedFeatures).map(([key, value]) => {
-                  if (value && key !== 'departments' && key !== 'bookingSystem' && key !== 'bookingUrl' && key !== 'phone' && key !== 'email' && key !== 'address') {
-                    return (
-                      <span key={key} className="bg-primary-light text-primary px-3 py-1 rounded-full text-sm">
-                        {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
-                      </span>
-                    )
-                  }
-                  return null
-                })}
+                {displaySelectedFeatures.map(([key]) => (
+                  <span key={key} className="bg-primary-light text-primary px-3 py-1 rounded-full text-sm">
+                    {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+                  </span>
+                ))}
               </div>
             </div>
           )}
