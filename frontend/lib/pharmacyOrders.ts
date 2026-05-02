@@ -243,3 +243,25 @@ export const markOwnerPharmacyOrdersSeen = async (
     return { error: 'Network error while marking orders as seen.' }
   }
 }
+
+export const deletePharmacyOrder = async (orderId: string): Promise<ApiResult<void>> => {
+  const token = getAuthToken()
+  if (!token) return { error: 'Authentication required.' }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/pharmacy/orders/${orderId}/`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+
+    if (response.status === 204) return { data: undefined }
+
+    const data = await parseJsonSafely(response)
+    if (!response.ok) return { error: extractErrorMessage(data), errorDetails: data }
+    return { data: undefined }
+  } catch {
+    return { error: 'Network error while deleting order.' }
+  }
+}

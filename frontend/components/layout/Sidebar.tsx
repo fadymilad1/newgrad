@@ -149,8 +149,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ userType, isOpen = true, onClo
     setIsLoggingOut(false)
   }
 
+  const dashboardHref = currentUserType === 'pharmacy' ? '/dashboard/pharmacy' : '/dashboard'
+
   const menuItems: SidebarItem[] = [
-    { label: 'Dashboard', icon: <FiHome />, href: '/dashboard' },
+    { label: 'Dashboard', icon: <FiHome />, href: dashboardHref },
     ...(currentUserType === 'hospital'
       ? [{ label: 'My Website', icon: <FiGlobe />, href: '/dashboard/hospital/setup' }]
       : []),
@@ -171,7 +173,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ userType, isOpen = true, onClo
     { label: 'Settings', icon: <FiSettings />, href: '/dashboard/settings' },
   ]
 
-  const isActive = (href: string) => pathname === href
+  const typeLabel = currentUserType === 'pharmacy' ? 'Pharmacy' : 'Hospital'
+  // Strip the business-type suffix if it was included in the stored name (e.g. "elzz Pharmacy" → "elzz")
+  const cleanBrandName = brandName.replace(new RegExp(`\\s*${typeLabel}\\s*$`, 'i'), '').trim() || brandName
+
+  // The dashboard root must be exact-match so it doesn't match every sub-route.
+  // All other sidebar items use prefix-match so sub-pages also highlight the parent.
+  const isActive = (href: string) =>
+    href === dashboardHref ? pathname === href : pathname === href || pathname.startsWith(href + '/')
 
   return (
     <>
@@ -187,7 +196,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ userType, isOpen = true, onClo
       } md:translate-x-0`}>
         <div className="p-4 sm:p-6 border-b border-neutral-border flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 sm:gap-3" onClick={onClose}>
-            <div className="h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0 rounded-full overflow-hidden border border-primary/20 bg-white">
+            <div className="h-12 w-12 sm:h-14 sm:w-14 flex-shrink-0 rounded-full overflow-hidden border border-primary/20 bg-white">
               <BrandLogo
                 src={brandLogo || '/mod logo.png'}
                 alt={`${brandName} logo`}
@@ -196,7 +205,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ userType, isOpen = true, onClo
                 fallbackClassName="h-full w-full bg-primary flex items-center justify-center text-white font-semibold text-sm"
               />
             </div>
-            <span className="text-xl sm:text-2xl font-bold text-primary">{brandName}</span>
+            <div className="flex flex-col leading-tight">
+              <span className="text-xl sm:text-2xl font-bold text-primary">{cleanBrandName}</span>
+              <span className="text-xl sm:text-2xl font-bold text-neutral-dark">{typeLabel}</span>
+            </div>
           </Link>
           <button
             onClick={onClose}
@@ -231,7 +243,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ userType, isOpen = true, onClo
             {item.icon}
             <span className="text-sm sm:text-base">{item.label}</span>
             {item.href === '/dashboard/orders' && currentUserType === 'pharmacy' && unseenOrdersCount > 0 ? (
-              <span className="ml-auto inline-flex min-w-[20px] h-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-semibold text-white">
+              <span className="ml-auto inline-flex min-w-[20px] h-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-white">
                 {unseenOrdersCount > 99 ? '99+' : unseenOrdersCount}
               </span>
             ) : null}

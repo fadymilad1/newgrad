@@ -1028,6 +1028,17 @@ class PharmacyOrderViewSet(viewsets.ReadOnlyModelViewSet):
 
         return Response(PharmacyOrderSerializer(order, context={'request': request}).data)
 
+    def destroy(self, request, pk=None):
+        """Delete a cancelled order (only cancelled orders may be deleted)."""
+        order = self.get_object()
+        if order.status != PharmacyOrder.Status.CANCELLED:
+            return Response(
+                {'detail': 'Only cancelled orders can be deleted.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        order.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     @action(detail=False, methods=['get'])
     def stats(self, request):
         queryset = self.get_queryset()
