@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { FiUpload, FiLayout, FiFileText, FiGlobe, FiMessageSquare, FiDollarSign } from 'react-icons/fi'
-import { getScopedItem } from '@/lib/storage'
+import { getScopedItem, setScopedItem } from '@/lib/storage'
 import { getPharmacyOrders, getPharmacyOrdersStats } from '@/lib/orders'
 
 type StatEntry = {
@@ -90,14 +90,17 @@ export default function DashboardPage() {
   const [hasPharmacySetup, setHasPharmacySetup] = useState(false)
   const [hasBusinessInfo, setHasBusinessInfo] = useState(false)
   const [isPublished, setIsPublished] = useState(false)
+  const [hospitalSubdomain, setHospitalSubdomain] = useState('')
+  const [hospitalName, setHospitalName] = useState('')
   const [productStats, setProductStats] = useState({ total: 0, outOfStock: 0, lowStock: 0 })
 
   useEffect(() => {
     // Get user type from localStorage (auth user, not scoped)
     const userData = localStorage.getItem('user')
+    let detectedType: 'hospital' | 'pharmacy' = 'hospital'
     if (userData) {
       const user = JSON.parse(userData)
-      const detectedType = user.businessType || user.business_type || 'hospital'
+      detectedType = user.businessType || user.business_type || 'hospital'
       setUserType(detectedType)
 
       if (detectedType === 'pharmacy') {
@@ -193,6 +196,51 @@ export default function DashboardPage() {
     }
 
     setIsPublished(getScopedItem('isPublished') === 'true')
+
+    // Also fetch real state from backend for hospital users
+    const token = localStorage.getItem('access_token')
+    if (token && detectedType === 'hospital') {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
+      // Fetch subdomain for My Website link
+      fetch(`${API_URL}/website-setups/`, { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          const results = data?.results || data
+          const setup = Array.isArray(results) ? results[0] : results
+          if (setup?.subdomain) setHospitalSubdomain(setup.subdomain)
+        })
+        .catch(() => {})
+      // Check if business info is saved
+      fetch(`${API_URL}/business-info/`, { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data?.name) {
+            setHasBusinessInfo(true)
+            setHospitalName(data.name)
+          }
+          if (data?.is_published) {
+            setIsPublished(true)
+            setScopedItem('isPublished', 'true')
+          }
+        })
+        .catch(() => {})
+      // Check if hospital features setup is done (profile exists)
+      fetch(`${API_URL}/hospital/admin/profile/profile/`, { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data?.id) {
+            // Only set selectedFeatures from backend if localStorage doesn't have it
+            // Avoids overwriting the setup form feature flags with raw DB fields
+            const existing = getScopedItem('selectedFeatures')
+            if (!existing) {
+              setSelectedFeatures({ _fromBackend: true })
+            } else {
+              setSelectedFeatures(JSON.parse(existing))
+            }
+          }
+        })
+        .catch(() => {})
+    }
   }, [router])
 
   // Refresh pharmacy order stats when page gains focus (e.g. after placing order or visiting Orders page)
@@ -239,7 +287,7 @@ export default function DashboardPage() {
           { label: 'Publish', completed: isPublished },
         ]
       : [
-          { label: 'Upload Logo', completed: hasBusinessInfo },
+          { label: 'Upload Logo', completed: hasBusinessInfo && Boolean(getScopedItem('businessInfo') && JSON.parse(getScopedItem('businessInfo') || '{}')?.logo) },
           { label: 'Hospital Setup', completed: Boolean(selectedFeatures) },
           { label: 'Business Info', completed: hasBusinessInfo },
           { label: 'Publish', completed: isPublished },
@@ -250,9 +298,9 @@ export default function DashboardPage() {
 
   const stats: StatEntry[] = userType === 'hospital' 
     ? [
-        { label: 'Total Appointments', value: 124, change: 12 },
-        { label: 'Pending Appointments', value: 8, change: -3 },
-        { label: 'This Month', value: 89, change: 5 },
+        { label: 'Total Appointments', value: 0, change: 0 },
+        { label: 'Pending Appointments', value: 0, change: 0 },
+        { label: 'This Month', value: 0, change: 0 },
       ]
     : pharmacyStatEntries
 
@@ -354,7 +402,7 @@ export default function DashboardPage() {
               <p className="text-sm text-neutral-gray">Add business info</p>
             </Card>
           </Link>
-          <Link href="/dashboard/hospital/setup?step=publish">
+          <Link href="/dashboard/business-info">
             <Card className="p-4 text-center hover:shadow-md transition-shadow cursor-pointer">
               <FiGlobe className="mx-auto mb-3 text-primary" size={32} />
               <h3 className="font-medium text-neutral-dark mb-1">Publish</h3>
@@ -450,7 +498,63 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {/* My Website Section */}
+      {/* My Website Section — Hospital */}
+      {userType === 'hospital' && (
+        <Card className="p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
+            <div>
+              <h2 className="text-lg sm:text-xl font-semibold text-neutral-dark mb-1">My Hospital Website</h2>
+              <p className="text-sm text-neutral-gray">
+                {isPublished
+                  ? `${hospitalName || 'Your hospital'} is live!`
+                  : 'Publish your website to go live.'}
+              </p>
+              {hospitalSubdomain && (
+                <p className="text-xs text-neutral-gray mt-1">
+                  <strong>URL: </strong>
+                  <span className="font-mono text-primary">
+                    {hospitalSubdomain}.localhost:3000
+                  </span>
+                  <span className="ml-2 text-gray-400">(subdomain routing)</span>
+                </p>
+              )}
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              {hospitalSubdomain && isPublished && (
+                <Button
+                  variant="primary"
+                  onClick={() => window.open(`http://${hospitalSubdomain}.localhost:3000`, '_blank', 'noopener,noreferrer')}
+                  className="whitespace-nowrap"
+                >
+                  <FiGlobe className="mr-2" size={16} />
+                  Visit My Website
+                </Button>
+              )}
+              <Link href="/dashboard/business-info">
+                <Button variant="secondary" className="whitespace-nowrap">
+                  {isPublished ? 'Edit & Republish' : 'Publish Website'}
+                </Button>
+              </Link>
+            </div>
+          </div>
+          {/* Quick stats */}
+          <div className="mt-4 pt-4 border-t border-neutral-border grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Setup', done: Boolean(selectedFeatures) },
+              { label: 'Business Info', done: hasBusinessInfo },
+              { label: 'Published', done: isPublished },
+              { label: 'Website Live', done: isPublished && Boolean(hospitalSubdomain) },
+            ].map(item => (
+              <div key={item.label} className={`rounded-lg p-3 text-center text-sm font-medium ${item.done ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-gray-50 text-gray-400 border border-gray-200'}`}>
+                <span className="mr-1">{item.done ? '✅' : '○'}</span>
+                {item.label}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* My Website Section — Pharmacy */}
       {userType === 'pharmacy' && (
         <Card className="p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
@@ -477,42 +581,29 @@ export default function DashboardPage() {
               {selectedTemplate && templatePurchased ? 'See My Website' : 'Preview Demo'}
             </Button>
           </div>
-          {selectedTemplate && templatePurchased && (
-            <div className="mt-4 pt-4 border-t border-neutral-border">
-              <p className="text-sm text-neutral-gray">
-                <strong>Website URL:</strong>{' '}
-                <a 
-                  href={`/templates/pharmacy/${selectedTemplate}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  {`${window.location.origin}/templates/pharmacy/${selectedTemplate}`}
-                </a>
-              </p>
-            </div>
-          )}
         </Card>
       )}
 
-      {/* AI Assistant Preview */}
-      <Card className="p-4 sm:p-6">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-2">
-          <h2 className="text-lg sm:text-xl font-semibold text-neutral-dark">AI Assistant</h2>
-          <Link href="/dashboard/ai-assistant">
-            <Button variant="ghost" className="text-sm sm:text-base">View All</Button>
-          </Link>
-        </div>
-        <div className="bg-neutral-light rounded-lg p-4 sm:p-6 h-40 sm:h-48 flex items-center justify-center">
-          <div className="text-center">
-            <FiMessageSquare className="mx-auto mb-3 text-ai" size={40} />
-            <p className="text-neutral-gray mb-4">Get help with your website</p>
+      {/* AI Assistant Preview — Pharmacy only (hospitals have chatbot on their public site) */}
+      {userType === 'pharmacy' && (
+        <Card className="p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-2">
+            <h2 className="text-lg sm:text-xl font-semibold text-neutral-dark">AI Assistant</h2>
             <Link href="/dashboard/ai-assistant">
-              <Button variant="primary">Open AI Assistant</Button>
+              <Button variant="ghost" className="text-sm sm:text-base">View All</Button>
             </Link>
           </div>
-        </div>
-      </Card>
+          <div className="bg-neutral-light rounded-lg p-4 sm:p-6 h-40 sm:h-48 flex items-center justify-center">
+            <div className="text-center">
+              <FiMessageSquare className="mx-auto mb-3 text-ai" size={40} />
+              <p className="text-neutral-gray mb-4">Get help with your website</p>
+              <Link href="/dashboard/ai-assistant">
+                <Button variant="primary">Open AI Assistant</Button>
+              </Link>
+            </div>
+          </div>
+        </Card>
+      )}
     </div>
   )
 }

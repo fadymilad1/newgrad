@@ -198,6 +198,12 @@ CORS_ALLOWED_ORIGINS = [
     "https://frontend-one-woad-66.vercel.app",
 ]
 
+# Allow all *.localhost:3000 subdomains (for hospital tenant routing in development)
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^http://[a-zA-Z0-9-]+\.localhost:3000$",
+    r"^http://[a-zA-Z0-9-]+\.localhost$",
+]
+
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL', default=False, cast=bool)
 

@@ -201,12 +201,78 @@ export default function HospitalSetupPage() {
     setPaymentOpen(true)
   }
 
-  const handlePaymentSuccess = () => {
+  const handlePaymentSuccess = async () => {
     // Store selected features (user-scoped)
     setScopedItem('selectedFeatures', JSON.stringify(formData))
     setScopedItem('totalPrice', totalPrice.toString())
+
+    // Save departments and doctors to the backend
+    try {
+      const token = localStorage.getItem('access_token')
+      if (token) {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
+        const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+
+        for (const dept of (formData.departments as Department[])) {
+          if (!dept.name?.trim()) continue
+
+          // Create department
+          const deptRes = await fetch(`${API_URL}/hospital/admin/departments/`, {
+            method: 'POST', headers,
+            body: JSON.stringify({ name: dept.name })
+          })
+
+          if (deptRes.ok) {
+            const deptData = await deptRes.json()
+            const deptId = deptData.id
+
+            // Create doctors for this department
+            for (const doctor of dept.doctors) {
+              if (!doctor.name?.trim()) continue
+              const doctorRes = await fetch(`${API_URL}/hospital/admin/doctors/`, {
+                method: 'POST', headers,
+                body: JSON.stringify({
+                  name: doctor.name,
+                  specialty: doctor.specialization || doctor.title || 'General',
+                  bio: [doctor.title, doctor.experience].filter(Boolean).join(' • '),
+                  department: deptId,
+                  is_active: true,
+                })
+              })
+              // Add default Mon-Fri 9am-5pm schedule so booking slots exist immediately
+              if (doctorRes.ok) {
+                const doctorData = await doctorRes.json()
+                const doctorId = doctorData.id
+                for (let day = 0; day <= 4; day++) {
+                  await fetch(`${API_URL}/hospital/admin/schedules/`, {
+                    method: 'POST', headers,
+                    body: JSON.stringify({
+                      doctor: doctorId,
+                      day_of_week: day,
+                      start_time: '09:00:00',
+                      end_time: '17:00:00',
+                      slot_duration_minutes: 30,
+                    })
+                  })
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Failed to save hospital setup to backend:', e)
+      // Continue anyway — user can add doctors later from the admin panel
+    }
+
     // Redirect to business info
     router.push('/dashboard/business-info?type=hospital')
+  }
+
+  const handleSaveDraft = () => {
+    setScopedItem('selectedFeatures', JSON.stringify(formData))
+    setScopedItem('totalPrice', totalPrice.toString())
+    alert('Draft saved successfully!')
   }
 
   // Don't render anything for pharmacy users (they'll be redirected)
@@ -323,7 +389,6 @@ export default function HospitalSetupPage() {
                                 onChange={(e) =>
                                   handleDoctorChange(deptIndex, doctorIndex, 'name', e.target.value)
                                 }
-                                required
                                 className="w-full px-4 py-2 border border-neutral-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                               />
                             </div>
@@ -338,7 +403,6 @@ export default function HospitalSetupPage() {
                                 onChange={(e) =>
                                   handleDoctorChange(deptIndex, doctorIndex, 'title', e.target.value)
                                 }
-                                required
                                 className="w-full px-4 py-2 border border-neutral-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                               />
                             </div>
@@ -355,7 +419,6 @@ export default function HospitalSetupPage() {
                                 onChange={(e) =>
                                   handleDoctorChange(deptIndex, doctorIndex, 'specialization', e.target.value)
                                 }
-                                required
                                 className="w-full px-4 py-2 border border-neutral-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                               />
                             </div>
@@ -370,7 +433,6 @@ export default function HospitalSetupPage() {
                                 onChange={(e) =>
                                   handleDoctorChange(deptIndex, doctorIndex, 'experience', e.target.value)
                                 }
-                                required
                                 className="w-full px-4 py-2 border border-neutral-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                               />
                             </div>
@@ -386,7 +448,6 @@ export default function HospitalSetupPage() {
                               onChange={(e) =>
                                 handleDoctorChange(deptIndex, doctorIndex, 'email', e.target.value)
                               }
-                              required
                               className="w-full px-4 py-2 border border-neutral-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                             />
                           </div>
@@ -394,7 +455,7 @@ export default function HospitalSetupPage() {
                           <div className="grid grid-cols-2 gap-3">
                             <div>
                               <label htmlFor={`doctor-photo-${deptIndex}-${doctorIndex}`} className="block text-sm font-medium text-neutral-dark mb-2">
-                                Doctor Photo {!doctor.photo && <span className="text-error text-xs">*</span>}
+                                Doctor Photo <span className="text-neutral-gray text-xs">(Optional)</span>
                               </label>
                               <input
                                 id={`doctor-photo-${deptIndex}-${doctorIndex}`}
@@ -402,11 +463,10 @@ export default function HospitalSetupPage() {
                                 accept=".jpg,.jpeg,.png"
                                 onChange={(e) => handlePhotoUpload(deptIndex, doctorIndex, e.target.files)}
                                 className="block w-full text-sm text-neutral-gray file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary-light file:text-primary hover:file:bg-primary hover:file:text-white transition-colors"
-                                required
                                 aria-label="Upload doctor photo"
                               />
                               <p className="text-xs text-neutral-gray mt-1">
-                                Upload doctor's photo (JPG, PNG) - Required
+                                Upload doctor's photo (JPG, PNG) - Optional for testing
                               </p>
                               {doctor.photo && (
                                 <div className="mt-2">
@@ -470,10 +530,10 @@ export default function HospitalSetupPage() {
 
           {/* Actions */}
           <div className="flex justify-end gap-4">
-            <Button variant="secondary" type="button">
+            <Button variant="secondary" type="button" onClick={handleSaveDraft}>
               Save Draft
             </Button>
-            <Button variant="primary" type="submit">
+            <Button variant="primary" type="submit" formNoValidate>
               <FiDollarSign className="mr-2" />
               Continue to Payment (${totalPrice})
             </Button>

@@ -101,17 +101,42 @@ def api_root(request):
 def signup(request):
     serializer = SignupSerializer(data=request.data)
     if serializer.is_valid():
-        user = serializer.save()
-        website_setup = WebsiteSetup.objects.create(user=user, subdomain=user.email.split('@')[0])
-        refresh = RefreshToken.for_user(user)
-        return Response({
-            'user': UserSerializer(user, context={'request': request}).data,
-            'tokens': {
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
-            },
-            'website_setup_id': str(website_setup.id),
-        }, status=status.HTTP_201_CREATED)
+        try:
+            with transaction.atomic():
+                user = serializer.save()
+                
+                # Ensure unique subdomain
+                base_subdomain = user.email.split('@')[0]
+                subdomain = base_subdomain
+                counter = 1
+                while WebsiteSetup.objects.filter(subdomain=subdomain).exists():
+                    subdomain = f"{base_subdomain}{counter}"
+                    counter += 1
+                    
+                website_setup = WebsiteSetup.objects.create(user=user, subdomain=subdomain)
+                
+                # If it's a hospital, create the hospital profile
+                if user.business_type == 'hospital':
+                    from hospitals.models.profile import HospitalProfile
+                    from hospitals.services.template_service import generate_default_hospital_template
+                    profile = HospitalProfile.objects.create(
+                        website_setup=website_setup,
+                        name=f"{user.name}'s Hospital"
+                    )
+                    generate_default_hospital_template(website_setup)
+                    
+                refresh = RefreshToken.for_user(user)
+                return Response({
+                    'user': UserSerializer(user, context={'request': request}).data,
+                    'tokens': {
+                        'refresh': str(refresh),
+                        'access': str(refresh.access_token),
+                    },
+                    'website_setup_id': str(website_setup.id),
+                }, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            logger.exception("Signup error")
+            return Response({'non_field_errors': [str(e)]}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 

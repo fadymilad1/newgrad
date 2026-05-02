@@ -26,6 +26,11 @@ class BusinessInfoSerializer(serializers.ModelSerializer):
 
 class BusinessInfoCreateUpdateSerializer(serializers.ModelSerializer):
     """Serializer for creating/updating BusinessInfo (without logo_url)"""
+    # Explicitly allow blank so an empty string doesn't fail URL validation
+    website = serializers.URLField(allow_blank=True, required=False)
+    # name is optional on PATCH (partial update)
+    name = serializers.CharField(required=False, allow_blank=True)
+
     class Meta:
         model = BusinessInfo
         fields = [

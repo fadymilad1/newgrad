@@ -36,40 +36,12 @@ function compressImage(dataUrl: string, maxWidth: number, maxHeight: number, qua
   })
 }
 
-const MEDIFY_DOMAIN_PREFIX = 'www.medify-'
-
-function slugifyWebsite(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-}
-
-function websiteValueFromBackend(raw: string): string {
-  const value = (raw || '').trim()
-  if (!value) return ''
-
-  const withoutProtocol = value.replace(/^https?:\/\//i, '')
-  const match = withoutProtocol.match(/^www\.medify-([a-z0-9-]+)(?:\.[a-z]{2,})?\/?$/i)
-  if (match?.[1]) {
-    return match[1]
-  }
-  return value
-}
-
 function toBackendWebsite(raw: string): string {
   const value = (raw || '').trim()
   if (!value) return ''
 
   if (/^https?:\/\//i.test(value)) {
     return value
-  }
-
-  if (!value.includes('.') && !value.includes('/')) {
-    const slug = slugifyWebsite(value)
-    return slug ? `https://${MEDIFY_DOMAIN_PREFIX}${slug}.com` : ''
   }
 
   return `https://${value}`
@@ -140,7 +112,7 @@ export default function BusinessInfoPage() {
               address: data.address || prev.address,
               contactPhone: data.contact_phone || prev.contactPhone,
               contactEmail: data.contact_email || prev.contactEmail,
-              website: websiteValueFromBackend(data.website || prev.website),
+              website: data.website || prev.website,
               workingHours: {
                 ...prev.workingHours,
                 ...(data.working_hours || {}),
@@ -172,7 +144,7 @@ export default function BusinessInfoPage() {
             address: parsed.address || prev.address,
             contactPhone: parsed.contactPhone || prev.contactPhone,
             contactEmail: parsed.contactEmail || prev.contactEmail,
-            website: websiteValueFromBackend(parsed.website || prev.website),
+            website: parsed.website || prev.website,
             // Never restore logo from localStorage - it's too large
             logo: null,
             workingHours: {
@@ -216,7 +188,8 @@ export default function BusinessInfoPage() {
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
 
     const formDataToSend = new FormData()
-    formDataToSend.append('name', formData.name)
+    // Always send name (required for create)
+    formDataToSend.append('name', formData.name || 'My Hospital')
     if (formData.logo) {
       formDataToSend.append('logo', formData.logo)
     }
@@ -224,7 +197,11 @@ export default function BusinessInfoPage() {
     formDataToSend.append('address', formData.address)
     formDataToSend.append('contact_phone', formData.contactPhone)
     formDataToSend.append('contact_email', formData.contactEmail)
-    formDataToSend.append('website', toBackendWebsite(formData.website))
+    // Only send website if non-empty to avoid Django URLField validation error
+    const websiteValue = toBackendWebsite(formData.website)
+    if (websiteValue) {
+      formDataToSend.append('website', websiteValue)
+    }
     formDataToSend.append('working_hours', JSON.stringify(formData.workingHours))
 
     const response = await fetch(`${API_URL}/business-info/`, {
@@ -240,6 +217,7 @@ export default function BusinessInfoPage() {
       return respData?.logo_url || null
     }
 
+    // On 404, record doesn't exist yet — create it instead
     if (response.status === 404) {
       const createResp = await fetch(`${API_URL}/business-info/`, {
         method: 'POST',
@@ -252,9 +230,12 @@ export default function BusinessInfoPage() {
         const createData = await createResp.json()
         return createData?.logo_url || null
       }
+      const createErrData = await createResp.json().catch(() => ({}))
+      throw new Error(`Create failed: ${JSON.stringify(createErrData)}`)
     }
 
-    throw new Error('Could not save business info to server.')
+    const errData = await response.json().catch(() => ({}))
+    throw new Error(`Could not save business info: ${JSON.stringify(errData)}`)
   }
 
   const handleSaveDraft = async () => {
@@ -379,8 +360,41 @@ export default function BusinessInfoPage() {
           return
         }
 
-        router.push('/dashboard')
-      })()
+        if (userType === 'hospital') {
+          try {
+            const token = localStorage.getItem('access_token')
+            if (token) {
+              // Correct endpoint: /api/hospital/admin/profile/profile/
+              const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
+              const res = await fetch(`${API_URL}/hospital/admin/profile/profile/`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+              })
+              if (res.ok) {
+                const data = await res.json()
+                // The profile has website_setup nested with subdomain
+                const subdomain = data.subdomain || data.website_setup?.subdomain
+                if (subdomain) {
+                  const host = window.location.host
+                  const protocol = window.location.protocol
+                  // In dev, host is localhost:3000
+                  // In prod, strip the leading 'app.' to get root domain
+                  const parts = host.split('.')
+                  let baseHost = host
+                  if (parts.length > 1 && !host.startsWith('localhost')) {
+                    baseHost = parts.slice(1).join('.')
+                  }
+                  const tenantUrl = `${protocol}//${subdomain}.${baseHost}`
+                  window.location.href = tenantUrl
+                  return
+                }
+              }
+            }
+          } catch (e) {
+            console.error('Failed to resolve tenant subdomain', e)
+          }
+        }
+        router.push('/dashboard');
+      })();
     }, 2000)
   }
 
@@ -563,22 +577,12 @@ export default function BusinessInfoPage() {
                 value={formData.contactEmail}
                 onChange={(e) => setFormData({ ...formData, contactEmail: e.target.value })}
               />
-              <div className="col-span-2">
                 <Input
-                  label="Website"
-                  placeholder="ezzpharma"
+                  label="External Website (Optional)"
+                  placeholder="https://www.myhospital.com"
                   value={formData.website}
                   onChange={(e) => setFormData({ ...formData, website: e.target.value })}
                 />
-                <p className="mt-1 text-xs text-neutral-gray">
-                  Medify domain preview:{' '}
-                  <span className="font-semibold text-neutral-dark">
-                    {formData.website.trim()
-                      ? `${MEDIFY_DOMAIN_PREFIX}${slugifyWebsite(formData.website)}`
-                      : `${MEDIFY_DOMAIN_PREFIX}yourname`}
-                  </span>
-                </p>
-              </div>
             </div>
           </Card>
 

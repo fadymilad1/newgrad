@@ -152,7 +152,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ userType, isOpen = true, onClo
   const menuItems: SidebarItem[] = [
     { label: 'Dashboard', icon: <FiHome />, href: '/dashboard' },
     ...(currentUserType === 'hospital'
-      ? [{ label: 'My Website', icon: <FiGlobe />, href: '/dashboard/hospital/setup' }]
+      ? [
+          { label: 'Hospital Setup', icon: <FiLayout />, href: '/dashboard/hospital/setup' },
+          { label: 'My Website', icon: <FiGlobe />, href: '/dashboard/business-info' },
+        ]
       : []),
     ...(currentUserType === 'pharmacy'
       ? [
@@ -167,7 +170,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ userType, isOpen = true, onClo
       icon: <FiShoppingCart />,
       href: '/dashboard/orders',
     },
-    { label: 'AI Assistant', icon: <FiMessageSquare />, href: '/dashboard/ai-assistant' },
+    // AI Assistant only for pharmacy; hospitals have chatbot on their public site
+    ...(currentUserType === 'pharmacy'
+      ? [{ label: 'AI Assistant', icon: <FiMessageSquare />, href: '/dashboard/ai-assistant' }]
+      : []),
     { label: 'Settings', icon: <FiSettings />, href: '/dashboard/settings' },
   ]
 
