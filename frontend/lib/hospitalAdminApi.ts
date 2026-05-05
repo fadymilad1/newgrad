@@ -30,6 +30,8 @@ function normalizeList<T>(payload: unknown): T[] {
 }
 
 export const hospitalAdminApi = {
+  // ─── Profile ───────────────────────────────────────────────────────────────
+
   async getProfile(): Promise<ApiResponse<HospitalProfile>> {
     const response = await fetch(`${API_BASE_URL}/hospital/admin/profile/profile/`, {
       method: 'GET',
@@ -49,6 +51,8 @@ export const hospitalAdminApi = {
     return parseJson<HospitalProfile>(response);
   },
 
+  // ─── Doctors ───────────────────────────────────────────────────────────────
+
   async listDoctors(): Promise<ApiResponse<Doctor[]>> {
     const response = await fetch(`${API_BASE_URL}/hospital/admin/doctors/`, {
       method: 'GET',
@@ -60,6 +64,43 @@ export const hospitalAdminApi = {
     return { data: normalizeList<Doctor>(parsed.data), status: parsed.status };
   },
 
+  async createDoctor(payload: {
+    name: string;
+    specialty: string;
+    bio?: string;
+    department: string;
+    is_active?: boolean;
+  }): Promise<ApiResponse<Doctor>> {
+    const response = await fetch(`${API_BASE_URL}/hospital/admin/doctors/`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ is_active: true, ...payload }),
+      cache: 'no-store',
+    });
+    return parseJson<Doctor>(response);
+  },
+
+  async updateDoctor(
+    id: string,
+    payload: Partial<{
+      name: string;
+      specialty: string;
+      bio: string;
+      department: string;
+      is_active: boolean;
+    }>,
+  ): Promise<ApiResponse<Doctor>> {
+    const response = await fetch(`${API_BASE_URL}/hospital/admin/doctors/${id}/`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify(payload),
+      cache: 'no-store',
+    });
+    return parseJson<Doctor>(response);
+  },
+
+  // ─── Departments ───────────────────────────────────────────────────────────
+
   async listDepartments(): Promise<ApiResponse<Department[]>> {
     const response = await fetch(`${API_BASE_URL}/hospital/admin/departments/`, {
       method: 'GET',
@@ -70,6 +111,18 @@ export const hospitalAdminApi = {
     if (!parsed.data) return { error: parsed.error, status: parsed.status, errorDetails: parsed.errorDetails };
     return { data: normalizeList<Department>(parsed.data), status: parsed.status };
   },
+
+  async createDepartment(payload: { name: string; description?: string }): Promise<ApiResponse<Department>> {
+    const response = await fetch(`${API_BASE_URL}/hospital/admin/departments/`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(payload),
+      cache: 'no-store',
+    });
+    return parseJson<Department>(response);
+  },
+
+  // ─── Appointments ──────────────────────────────────────────────────────────
 
   async listAppointments(status?: AppointmentStatus): Promise<ApiResponse<Appointment[]>> {
     const query = status ? `?status=${status}` : '';
@@ -91,5 +144,30 @@ export const hospitalAdminApi = {
       cache: 'no-store',
     });
     return parseJson<Appointment>(response);
+  },
+
+  // ─── Schedules ─────────────────────────────────────────────────────────────
+
+  /** Creates Mon–Fri 09:00–17:00 (30 min slots) for a newly created doctor */
+  async createDefaultSchedules(doctorId: string): Promise<void> {
+    const hdrs = authHeaders();
+    const requests: Promise<Response>[] = [];
+    for (let day = 0; day <= 4; day++) {
+      requests.push(
+        fetch(`${API_BASE_URL}/hospital/admin/schedules/`, {
+          method: 'POST',
+          headers: hdrs,
+          body: JSON.stringify({
+            doctor: doctorId,
+            day_of_week: day,
+            start_time: '09:00:00',
+            end_time: '17:00:00',
+            slot_duration_minutes: 30,
+          }),
+          cache: 'no-store',
+        }),
+      );
+    }
+    await Promise.allSettled(requests);
   },
 };

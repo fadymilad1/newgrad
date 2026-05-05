@@ -326,8 +326,8 @@ export default function BusinessInfoPage() {
     
     setIsPublishing(false)
     setIsPublished(true)
-    
-    // After publishing, send user to their live website (pharmacy) or dashboard (hospital)
+
+    // After publishing, navigate to the appropriate destination
     setTimeout(() => {
       void (async () => {
         if (userType === 'pharmacy') {
@@ -360,43 +360,38 @@ export default function BusinessInfoPage() {
           return
         }
 
-        if (userType === 'hospital') {
-          try {
-            const token = localStorage.getItem('access_token')
-            if (token) {
-              // Correct endpoint: /api/hospital/admin/profile/profile/
-              const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
-              const res = await fetch(`${API_URL}/hospital/admin/profile/profile/`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-              })
-              if (res.ok) {
-                const data = await res.json()
-                // The profile has website_setup nested with subdomain
-                const subdomain = data.subdomain || data.website_setup?.subdomain
-                if (subdomain) {
-                  const host = window.location.host
-                  const protocol = window.location.protocol
-                  // In dev, host is localhost:3000
-                  // In prod, strip the leading 'app.' to get root domain
-                  const parts = host.split('.')
-                  let baseHost = host
-                  if (parts.length > 1 && !host.startsWith('localhost')) {
-                    baseHost = parts.slice(1).join('.')
-                  }
-                  const tenantUrl = `${protocol}//${subdomain}.${baseHost}`
-                  window.location.href = tenantUrl
-                  return
-                }
-              }
-            }
-          } catch (e) {
-            console.error('Failed to resolve tenant subdomain', e)
-          }
-        }
-        router.push('/dashboard');
-      })();
-    }, 2000)
+        // Hospital users: always redirect to the dashboard.
+        // The subdomain URL is shown as a copyable link in the success card.
+        router.push('/dashboard/hospital')
+      })()
+    }, 3000)
   }
+
+  // Fetch subdomain for the success card link
+  const [publishedSubdomain, setPublishedSubdomain] = useState<string | null>(null)
+
+  // After publish succeeds, resolve the subdomain to show as a copyable URL
+  useEffect(() => {
+    if (!isPublished || userType !== 'hospital') return
+    const fetchSubdomain = async () => {
+      try {
+        const token = localStorage.getItem('access_token')
+        if (!token) return
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
+        const res = await fetch(`${API_URL}/hospital/admin/profile/profile/`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (res.ok) {
+          const data = await res.json()
+          const subdomain = data.subdomain || data.website_setup?.subdomain
+          if (subdomain) setPublishedSubdomain(subdomain)
+        }
+      } catch {
+        // ignore
+      }
+    }
+    void fetchSubdomain()
+  }, [isPublished, userType])
 
   const days = [
     { key: 'monday', label: 'Monday' },
@@ -593,9 +588,40 @@ export default function BusinessInfoPage() {
               <h3 className="text-2xl font-semibold text-neutral-dark mb-2">
                 Website Published Successfully!
               </h3>
-              <p className="text-neutral-gray mb-6">
-                Your website is now live. Redirecting to dashboard...
+              <p className="text-neutral-gray mb-4">
+                Your website is now live and accessible at:
               </p>
+              {publishedSubdomain ? (
+                <div className="mb-6 flex flex-col items-center gap-2">
+                  <div className="flex items-center gap-2 bg-primary-light border border-primary/20 rounded-lg px-4 py-2">
+                    <FiGlobe className="text-primary flex-shrink-0" />
+                    <span className="text-primary font-mono text-sm break-all">
+                      {`${window.location.protocol}//${publishedSubdomain}.${
+                        window.location.host.startsWith('localhost')
+                          ? window.location.host
+                          : window.location.host.split('.').slice(1).join('.')
+                      }`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = `${window.location.protocol}//${publishedSubdomain}.${
+                          window.location.host.startsWith('localhost')
+                            ? window.location.host
+                            : window.location.host.split('.').slice(1).join('.')
+                        }`
+                        void navigator.clipboard.writeText(url)
+                      }}
+                      className="ml-2 text-xs text-primary underline hover:no-underline flex-shrink-0"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <p className="text-xs text-neutral-gray">Share this URL with patients to access your hospital website.</p>
+                </div>
+              ) : (
+                <p className="text-neutral-gray mb-6">Redirecting to dashboard in a moment...</p>
+              )}
             </Card>
           ) : (
             <div className="flex justify-end gap-4">

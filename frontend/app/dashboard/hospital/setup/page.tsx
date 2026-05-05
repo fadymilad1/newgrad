@@ -4,11 +4,9 @@ import React, { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
-import { Textarea } from '@/components/ui/Textarea'
 import { Toggle } from '@/components/ui/Toggle'
 import { PaymentModal } from '@/components/payment/PaymentModal'
-import { FiDollarSign, FiUser, FiPlus, FiTrash2 } from 'react-icons/fi'
+import { FiDollarSign } from 'react-icons/fi'
 import { getScopedItem, setScopedItem } from '@/lib/storage'
 import { websiteSetupApiV2 } from '@/lib/api'
 
@@ -19,53 +17,20 @@ interface Feature {
   price: number
 }
 
-interface Doctor {
-  name: string
-  title: string
-  specialization: string
-  email: string
-  experience: string
-  certificates: File[]
-  photo: File | null
+type FeatureState = {
+  reviewSystem: boolean
+  aiChatbot: boolean
+  ambulanceOrdering: boolean
+  patientPortal: boolean
+  prescriptionRefill: boolean
 }
 
-interface Department {
-  name: string
-  doctors: Doctor[]
-}
-
-type FeatureState = Pick<
-  typeof DEFAULT_FORM_STATE,
-  'reviewSystem' | 'aiChatbot' | 'ambulanceOrdering' | 'patientPortal' | 'prescriptionRefill'
->
-
-const HOSPITAL_DRAFT_KEY = 'hospitalSetupDraft'
-
-const createEmptyDoctor = (): Doctor => ({
-  name: '',
-  title: '',
-  specialization: '',
-  email: '',
-  experience: '',
-  certificates: [],
-  photo: null,
-})
-
-const createEmptyDepartment = (): Department => ({
-  name: '',
-  doctors: [createEmptyDoctor()],
-})
-
-const DEFAULT_FORM_STATE = {
-  // Features
+const DEFAULT_FORM_STATE: FeatureState = {
   reviewSystem: false,
   aiChatbot: false,
   ambulanceOrdering: false,
   patientPortal: false,
   prescriptionRefill: false,
-
-  // Departments with doctors
-  departments: [createEmptyDepartment()],
 }
 
 const FEATURES: Feature[] = [
@@ -80,7 +45,7 @@ export default function HospitalSetupPage() {
   const router = useRouter()
   const [paymentOpen, setPaymentOpen] = useState(false)
   const [userType, setUserType] = useState<'hospital' | 'pharmacy'>('hospital')
-  const [formData, setFormData] = useState(DEFAULT_FORM_STATE)
+  const [formData, setFormData] = useState<FeatureState>(DEFAULT_FORM_STATE)
   const [isHydrated, setIsHydrated] = useState(false)
 
   // Check user type and redirect pharmacy users
@@ -90,8 +55,7 @@ export default function HospitalSetupPage() {
       const user = JSON.parse(userData)
       const businessType = user.businessType || user.business_type || 'hospital'
       setUserType(businessType)
-      
-      // Redirect pharmacy users to templates page
+
       if (businessType === 'pharmacy') {
         router.push('/dashboard/pharmacy/templates')
         return
@@ -145,55 +109,7 @@ export default function HospitalSetupPage() {
         console.warn('Failed to load stored hospital features:', error)
       }
 
-      let draftFeatures: Partial<FeatureState> | null = null
-      let draftDepartments: Department[] | null = null
-
-      try {
-        const draftRaw = getScopedItem(HOSPITAL_DRAFT_KEY)
-        if (draftRaw) {
-          const parsed = JSON.parse(draftRaw) as {
-            features?: Partial<FeatureState>
-            departments?: Array<Record<string, unknown>>
-          }
-          if (parsed?.features && typeof parsed.features === 'object') {
-            draftFeatures = {
-              reviewSystem: Boolean(parsed.features.reviewSystem),
-              aiChatbot: Boolean(parsed.features.aiChatbot),
-              ambulanceOrdering: Boolean(parsed.features.ambulanceOrdering),
-              patientPortal: Boolean(parsed.features.patientPortal),
-              prescriptionRefill: Boolean(parsed.features.prescriptionRefill),
-            }
-          }
-
-          if (Array.isArray(parsed?.departments)) {
-            const cleanedDepartments = parsed.departments.map((dept) => {
-              const name = typeof dept?.name === 'string' ? dept.name : ''
-              const doctorsRaw = Array.isArray((dept as any)?.doctors) ? (dept as any).doctors : []
-              const doctors = doctorsRaw.map((doc: any) => ({
-                ...createEmptyDoctor(),
-                name: typeof doc?.name === 'string' ? doc.name : '',
-                title: typeof doc?.title === 'string' ? doc.title : '',
-                specialization: typeof doc?.specialization === 'string' ? doc.specialization : '',
-                email: typeof doc?.email === 'string' ? doc.email : '',
-                experience: typeof doc?.experience === 'string' ? doc.experience : '',
-              }))
-
-              return {
-                name,
-                doctors: doctors.length > 0 ? doctors : [createEmptyDoctor()],
-              } as Department
-            })
-
-            if (cleanedDepartments.length > 0) {
-              draftDepartments = cleanedDepartments
-            }
-          }
-        }
-      } catch (error) {
-        console.warn('Failed to load hospital setup draft:', error)
-      }
-
-      const resolvedFeatures = backendFeatures || storedFeatures || draftFeatures || null
+      const resolvedFeatures = backendFeatures || storedFeatures || null
       if (backendFeatures) {
         setScopedItem('selectedFeatures', JSON.stringify(backendFeatures))
       }
@@ -201,7 +117,6 @@ export default function HospitalSetupPage() {
       setFormData((prev) => ({
         ...prev,
         ...(resolvedFeatures || {}),
-        departments: draftDepartments || prev.departments,
       }))
 
       setIsHydrated(true)
@@ -210,131 +125,22 @@ export default function HospitalSetupPage() {
     void hydrate()
   }, [])
 
-  const handleDepartmentNameChange = (index: number, value: string) => {
-    const newDepartments = [...formData.departments] as Department[]
-    newDepartments[index] = { ...newDepartments[index], name: value }
-    setFormData({ ...formData, departments: newDepartments })
-  }
-
-  const addDepartment = () => {
-    const newDepartments = [...(formData.departments as Department[]), {
-      name: '',
-      doctors: [
-        {
-          name: '',
-          title: '',
-          specialization: '',
-          email: '',
-          experience: '',
-          certificates: [],
-          photo: null,
-        },
-      ],
-    }]
-
-    setFormData({
-      ...formData,
-      departments: newDepartments,
-    })
-  }
-
-  const removeDepartment = (index: number) => {
-    const newDepartments = (formData.departments as Department[]).filter((_, i) => i !== index)
-    setFormData({ ...formData, departments: newDepartments })
-  }
-
-  const handleDoctorChange = (
-    deptIndex: number,
-    doctorIndex: number,
-    field: keyof Doctor,
-    value: string | File[] | File | null
-  ) => {
-    const newDepartments = [...(formData.departments as Department[])]
-    const doctors = [...newDepartments[deptIndex].doctors]
-    doctors[doctorIndex] = { ...doctors[doctorIndex], [field]: value }
-    newDepartments[deptIndex] = { ...newDepartments[deptIndex], doctors }
-    setFormData({ ...formData, departments: newDepartments })
-  }
-
-  const handleCertificateUpload = (
-    deptIndex: number,
-    doctorIndex: number,
-    files: FileList | null
-  ) => {
-    if (files) {
-      const fileArray = Array.from(files)
-      handleDoctorChange(deptIndex, doctorIndex, 'certificates', fileArray)
-    }
-  }
-
-  const handlePhotoUpload = (
-    deptIndex: number,
-    doctorIndex: number,
-    files: FileList | null
-  ) => {
-    if (files && files[0]) {
-      handleDoctorChange(deptIndex, doctorIndex, 'photo', files[0])
-    }
-  }
-
-  const addDoctor = (deptIndex: number) => {
-    const newDepartments = [...(formData.departments as Department[])]
-    newDepartments[deptIndex] = {
-      ...newDepartments[deptIndex],
-      doctors: [
-        ...newDepartments[deptIndex].doctors,
-        {
-          name: '',
-          title: '',
-          specialization: '',
-          email: '',
-          experience: '',
-          certificates: [],
-          photo: null,
-        },
-      ],
-    }
-    setFormData({ ...formData, departments: newDepartments })
-  }
-
-  const removeDoctor = (deptIndex: number, doctorIndex: number) => {
-    const newDepartments = [...(formData.departments as Department[])]
-    newDepartments[deptIndex] = {
-      ...newDepartments[deptIndex],
-      doctors: newDepartments[deptIndex].doctors.filter((_, i) => i !== doctorIndex),
-    }
-    setFormData({ ...formData, departments: newDepartments })
-  }
-
   // Calculate total price dynamically
   const totalPrice = useMemo(() => {
     let total = 0
-    FEATURES.forEach(feature => {
-      if (formData[feature.key as keyof typeof formData]) {
+    FEATURES.forEach((feature) => {
+      if (formData[feature.key as keyof FeatureState]) {
         total += feature.price
       }
     })
     return total
   }, [formData])
 
-  const featureState: FeatureState = useMemo(() => ({
-    reviewSystem: formData.reviewSystem,
-    aiChatbot: formData.aiChatbot,
-    ambulanceOrdering: formData.ambulanceOrdering,
-    patientPortal: formData.patientPortal,
-    prescriptionRefill: formData.prescriptionRefill,
-  }), [
-    formData.reviewSystem,
-    formData.aiChatbot,
-    formData.ambulanceOrdering,
-    formData.patientPortal,
-    formData.prescriptionRefill,
-  ])
-
+  // Auto-save features to backend whenever they change
   useEffect(() => {
     if (!isHydrated) return
 
-    setScopedItem('selectedFeatures', JSON.stringify(featureState))
+    setScopedItem('selectedFeatures', JSON.stringify(formData))
     setScopedItem('totalPrice', totalPrice.toString())
 
     const persist = async () => {
@@ -342,11 +148,11 @@ export default function HospitalSetupPage() {
         const token = localStorage.getItem('access_token')
         if (!token) return
         await websiteSetupApiV2.update({
-          review_system: featureState.reviewSystem,
-          ai_chatbot: featureState.aiChatbot,
-          ambulance_ordering: featureState.ambulanceOrdering,
-          patient_portal: featureState.patientPortal,
-          prescription_refill: featureState.prescriptionRefill,
+          review_system: formData.reviewSystem,
+          ai_chatbot: formData.aiChatbot,
+          ambulance_ordering: formData.ambulanceOrdering,
+          patient_portal: formData.patientPortal,
+          prescription_refill: formData.prescriptionRefill,
           total_price: totalPrice,
         })
       } catch (error) {
@@ -355,114 +161,21 @@ export default function HospitalSetupPage() {
     }
 
     void persist()
-  }, [featureState, isHydrated, totalPrice])
+  }, [formData, isHydrated, totalPrice])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    // Open payment modal
     setPaymentOpen(true)
   }
 
   const handlePaymentSuccess = async () => {
-    // Store selected features (user-scoped)
-    setScopedItem('selectedFeatures', JSON.stringify(featureState))
+    setScopedItem('selectedFeatures', JSON.stringify(formData))
     setScopedItem('totalPrice', totalPrice.toString())
-
-    const draftDepartments = (formData.departments as Department[]).map((dept) => ({
-      name: dept.name,
-      doctors: dept.doctors.map((doctor) => ({
-        name: doctor.name,
-        title: doctor.title,
-        specialization: doctor.specialization,
-        email: doctor.email,
-        experience: doctor.experience,
-      })),
-    }))
-    setScopedItem(HOSPITAL_DRAFT_KEY, JSON.stringify({
-      features: featureState,
-      departments: draftDepartments,
-    }))
-
-    // Save departments and doctors to the backend
-    try {
-      const token = localStorage.getItem('access_token')
-      if (token) {
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
-        const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
-
-        for (const dept of (formData.departments as Department[])) {
-          if (!dept.name?.trim()) continue
-
-          // Create department
-          const deptRes = await fetch(`${API_URL}/hospital/admin/departments/`, {
-            method: 'POST', headers,
-            body: JSON.stringify({ name: dept.name })
-          })
-
-          if (deptRes.ok) {
-            const deptData = await deptRes.json()
-            const deptId = deptData.id
-
-            // Create doctors for this department
-            for (const doctor of dept.doctors) {
-              if (!doctor.name?.trim()) continue
-              const doctorRes = await fetch(`${API_URL}/hospital/admin/doctors/`, {
-                method: 'POST', headers,
-                body: JSON.stringify({
-                  name: doctor.name,
-                  specialty: doctor.specialization || doctor.title || 'General',
-                  bio: [doctor.title, doctor.experience].filter(Boolean).join(' • '),
-                  department: deptId,
-                  is_active: true,
-                })
-              })
-              // Add default Mon-Fri 9am-5pm schedule so booking slots exist immediately
-              if (doctorRes.ok) {
-                const doctorData = await doctorRes.json()
-                const doctorId = doctorData.id
-                for (let day = 0; day <= 4; day++) {
-                  await fetch(`${API_URL}/hospital/admin/schedules/`, {
-                    method: 'POST', headers,
-                    body: JSON.stringify({
-                      doctor: doctorId,
-                      day_of_week: day,
-                      start_time: '09:00:00',
-                      end_time: '17:00:00',
-                      slot_duration_minutes: 30,
-                    })
-                  })
-                }
-              }
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.error('Failed to save hospital setup to backend:', e)
-      // Continue anyway — user can add doctors later from the admin panel
-    }
-
-    // Redirect to business info
     router.push('/dashboard/business-info?type=hospital')
   }
 
   const handleSaveDraft = () => {
-    const draftDepartments = (formData.departments as Department[]).map((dept) => ({
-      name: dept.name,
-      doctors: dept.doctors.map((doctor) => ({
-        name: doctor.name,
-        title: doctor.title,
-        specialization: doctor.specialization,
-        email: doctor.email,
-        experience: doctor.experience,
-      })),
-    }))
-
-    setScopedItem(HOSPITAL_DRAFT_KEY, JSON.stringify({
-      features: featureState,
-      departments: draftDepartments,
-    }))
-    setScopedItem('selectedFeatures', JSON.stringify(featureState))
+    setScopedItem('selectedFeatures', JSON.stringify(formData))
     setScopedItem('totalPrice', totalPrice.toString())
     alert('Draft saved successfully!')
   }
@@ -480,7 +193,14 @@ export default function HospitalSetupPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-neutral-dark mb-2">Hospital Website Setup</h1>
-        <p className="text-neutral-gray">Configure your hospital website features and information</p>
+        <p className="text-neutral-gray">
+          Select the features you want on your hospital website. You can manage your doctors and
+          departments from the{' '}
+          <a href="/dashboard/hospital/doctors" className="text-primary underline">
+            Doctors tab
+          </a>
+          .
+        </p>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -500,7 +220,7 @@ export default function HospitalSetupPage() {
                   <div className="flex-1">
                     <Toggle
                       label={feature.label}
-                      checked={formData[feature.key as keyof typeof formData] as boolean}
+                      checked={formData[feature.key as keyof FeatureState]}
                       onChange={(checked) =>
                         setFormData({ ...formData, [feature.key]: checked })
                       }
@@ -510,212 +230,6 @@ export default function HospitalSetupPage() {
                   <div className="ml-4 text-right">
                     <p className="text-lg font-semibold text-neutral-dark">${feature.price}</p>
                     <p className="text-xs text-neutral-gray">{feature.key === 'aiChatbot' ? '/month' : 'one-time'}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          {/* Departments & Doctors */}
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-xl font-semibold text-neutral-dark">Departments & Doctors</h2>
-                <p className="text-sm text-neutral-gray">
-                  Add each department and the doctors that belong to it. This will appear on your hospital website.
-                </p>
-              </div>
-              <Button type="button" variant="secondary" onClick={addDepartment}>
-                <FiPlus className="mr-2" />
-                Add Department
-              </Button>
-            </div>
-            <div className="space-y-6">
-              {(formData.departments as Department[]).map((dept, deptIndex) => (
-                <div key={deptIndex} className="border border-neutral-border rounded-lg p-4 space-y-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <Input
-                      label="Department Name"
-                      placeholder="e.g. Cardiology, Pediatrics, Radiology"
-                      value={dept.name}
-                      onChange={(e) => handleDepartmentNameChange(deptIndex, e.target.value)}
-                      className="flex-1"
-                    />
-                    { (formData.departments as Department[]).length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeDepartment(deptIndex)}
-                        className="p-2 text-error hover:bg-neutral-light rounded-lg transition-colors"
-                        aria-label="Remove department"
-                      >
-                        <FiTrash2 />
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <FiUser className="text-primary" />
-                        <span className="font-medium text-neutral-dark">Doctors in this department</span>
-                      </div>
-                      <Button type="button" variant="ghost" onClick={() => addDoctor(deptIndex)}>
-                        <FiPlus className="mr-1" />
-                        Add Doctor
-                      </Button>
-                    </div>
-
-                    <div className="space-y-3">
-                      {dept.doctors.map((doctor, doctorIndex) => (
-                        <div
-                          key={doctorIndex}
-                          className="border border-neutral-border rounded-lg p-3 space-y-3"
-                        >
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className="block text-sm font-medium text-neutral-dark mb-2">
-                                Doctor Name {!doctor.name && <span className="text-error text-xs">*</span>}
-                              </label>
-                              <input
-                                type="text"
-                                placeholder="Full name"
-                                value={doctor.name}
-                                onChange={(e) =>
-                                  handleDoctorChange(deptIndex, doctorIndex, 'name', e.target.value)
-                                }
-                                className="w-full px-4 py-2 border border-neutral-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-neutral-dark mb-2">
-                                Title {!doctor.title && <span className="text-error text-xs">*</span>}
-                              </label>
-                              <input
-                                type="text"
-                                placeholder="e.g. Consultant Cardiologist"
-                                value={doctor.title}
-                                onChange={(e) =>
-                                  handleDoctorChange(deptIndex, doctorIndex, 'title', e.target.value)
-                                }
-                                className="w-full px-4 py-2 border border-neutral-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                              />
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className="block text-sm font-medium text-neutral-dark mb-2">
-                                Specialization {!doctor.specialization && <span className="text-error text-xs">*</span>}
-                              </label>
-                              <input
-                                type="text"
-                                placeholder="e.g. Cardiology"
-                                value={doctor.specialization}
-                                onChange={(e) =>
-                                  handleDoctorChange(deptIndex, doctorIndex, 'specialization', e.target.value)
-                                }
-                                className="w-full px-4 py-2 border border-neutral-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-neutral-dark mb-2">
-                                Experience {!doctor.experience && <span className="text-error text-xs">*</span>}
-                              </label>
-                              <input
-                                type="text"
-                                placeholder="e.g. 10 years"
-                                value={doctor.experience}
-                                onChange={(e) =>
-                                  handleDoctorChange(deptIndex, doctorIndex, 'experience', e.target.value)
-                                }
-                                className="w-full px-4 py-2 border border-neutral-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                              />
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-neutral-dark mb-2">
-                              Email {!doctor.email && <span className="text-error text-xs">*</span>}
-                            </label>
-                            <input
-                              type="email"
-                              placeholder="doctor@example.com"
-                              value={doctor.email}
-                              onChange={(e) =>
-                                handleDoctorChange(deptIndex, doctorIndex, 'email', e.target.value)
-                              }
-                              className="w-full px-4 py-2 border border-neutral-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                            />
-                          </div>
-                          
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label htmlFor={`doctor-photo-${deptIndex}-${doctorIndex}`} className="block text-sm font-medium text-neutral-dark mb-2">
-                                Doctor Photo <span className="text-neutral-gray text-xs">(Optional)</span>
-                              </label>
-                              <input
-                                id={`doctor-photo-${deptIndex}-${doctorIndex}`}
-                                type="file"
-                                accept=".jpg,.jpeg,.png"
-                                onChange={(e) => handlePhotoUpload(deptIndex, doctorIndex, e.target.files)}
-                                className="block w-full text-sm text-neutral-gray file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary-light file:text-primary hover:file:bg-primary hover:file:text-white transition-colors"
-                                aria-label="Upload doctor photo"
-                              />
-                              <p className="text-xs text-neutral-gray mt-1">
-                                Upload doctor's photo (JPG, PNG) - Optional for testing
-                              </p>
-                              {doctor.photo && (
-                                <div className="mt-2">
-                                  <div className="text-xs text-primary bg-primary-light px-2 py-1 rounded inline-block">
-                                    📷 {doctor.photo.name}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                            
-                            <div>
-                              <label htmlFor={`doctor-certificates-${deptIndex}-${doctorIndex}`} className="block text-sm font-medium text-neutral-dark mb-2">
-                                Doctor Certificates <span className="text-neutral-gray text-xs">(Optional)</span>
-                              </label>
-                              <input
-                                id={`doctor-certificates-${deptIndex}-${doctorIndex}`}
-                                type="file"
-                                multiple
-                                accept=".pdf,.jpg,.jpeg,.png"
-                                onChange={(e) => handleCertificateUpload(deptIndex, doctorIndex, e.target.files)}
-                                className="block w-full text-sm text-neutral-gray file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary-light file:text-primary hover:file:bg-primary hover:file:text-white transition-colors"
-                                aria-label="Upload doctor certificates"
-                              />
-                              <p className="text-xs text-neutral-gray mt-1">
-                                Upload certificates (PDF, JPG, PNG). Multiple files allowed.
-                              </p>
-                              {doctor.certificates && doctor.certificates.length > 0 && (
-                                <div className="mt-2">
-                                  <p className="text-xs text-neutral-gray mb-1">Uploaded files:</p>
-                                  <div className="space-y-1">
-                                    {doctor.certificates.map((file, fileIndex) => (
-                                      <div key={fileIndex} className="text-xs text-primary bg-primary-light px-2 py-1 rounded inline-block mr-2">
-                                        📄 {file.name}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          {dept.doctors.length > 1 && (
-                            <div className="flex justify-end">
-                              <button
-                                type="button"
-                                onClick={() => removeDoctor(deptIndex, doctorIndex)}
-                                className="p-2 text-error hover:bg-neutral-light rounded-lg transition-colors"
-                                aria-label="Remove doctor"
-                              >
-                                <FiTrash2 />
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
                   </div>
                 </div>
               ))}
