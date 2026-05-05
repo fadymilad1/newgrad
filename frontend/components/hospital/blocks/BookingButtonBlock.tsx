@@ -15,10 +15,10 @@ export default function BookingButtonBlock({ settings }: BookingButtonBlockProps
         : '/booking';
 
     return (
-        <div className="container mx-auto px-6 py-8 flex justify-center">
+        <div className="mx-auto flex max-w-7xl justify-center px-4 py-10 sm:px-6">
             <Link
                 href={href}
-                className="bg-teal-600 hover:bg-teal-700 text-white font-bold py-4 px-10 rounded-full shadow-md transition-colors text-lg"
+                className="rounded-full bg-gradient-to-r from-blue-600 to-teal-500 px-10 py-4 text-lg font-bold text-white shadow transition hover:from-blue-700 hover:to-teal-600"
             >
                 {btnText}
             </Link>

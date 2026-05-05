@@ -1,6 +1,7 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from datetime import datetime
 from django.utils.dateparse import parse_date
@@ -9,7 +10,7 @@ from core.models import WebsiteSetup
 from .models import HospitalProfile, Department, Doctor, DoctorSchedule, Appointment, Page, Block
 from .serializers import (
     HospitalProfileSerializer, DepartmentSerializer, DoctorSerializer, 
-    DoctorScheduleSerializer, AppointmentSerializer, PageSerializer, BlockSerializer
+    DoctorScheduleSerializer, AppointmentSerializer, AppointmentAdminSerializer, PageSerializer, BlockSerializer
 )
 from .services.booking_engine import get_available_slots
 from .services.template_service import generate_default_hospital_template
@@ -86,6 +87,29 @@ class DoctorScheduleViewSet(viewsets.ModelViewSet):
         doctor_id = self.request.data.get('doctor')
         doctor = Doctor.objects.get(id=doctor_id, website_setup__user=self.request.user)
         serializer.save(doctor=doctor)
+
+
+class AppointmentAdminViewSet(viewsets.ModelViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = AppointmentAdminSerializer
+
+    def get_queryset(self):
+        queryset = (
+            Appointment.objects
+            .filter(website_setup__user=self.request.user)
+            .select_related('doctor')
+            .order_by('-start_datetime')
+        )
+        status_value = self.request.query_params.get('status')
+        if status_value:
+            queryset = queryset.filter(status=status_value.upper())
+        return queryset
+
+    def perform_create(self, serializer):
+        doctor = serializer.validated_data['doctor']
+        if doctor.website_setup.user_id != self.request.user.id:
+            raise ValidationError({'doctor': 'Doctor does not belong to current user'})
+        serializer.save(website_setup=doctor.website_setup)
 
 
 # Public APIs

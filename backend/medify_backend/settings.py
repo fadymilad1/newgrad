@@ -200,7 +200,7 @@ CORS_ALLOWED_ORIGINS = [
 
 # Allow all *.localhost:3000 subdomains (for hospital tenant routing in development)
 CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^http://[a-zA-Z0-9-]+\.localhost:3000$",
+    r"^http://[a-zA-Z0-9.-]+\.localhost:3000$",
     r"^http://[a-zA-Z0-9-]+\.localhost$",
 ]
 

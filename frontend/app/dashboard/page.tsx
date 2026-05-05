@@ -107,6 +107,10 @@ export default function DashboardPage() {
         router.replace('/dashboard/pharmacy')
         return
       }
+      if (detectedType === 'hospital') {
+        router.replace('/dashboard/hospital')
+        return
+      }
     }
 
     // Get selected features (for hospital) - user-scoped

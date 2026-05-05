@@ -149,14 +149,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ userType, isOpen = true, onClo
     setIsLoggingOut(false)
   }
 
-  const dashboardHref = currentUserType === 'pharmacy' ? '/dashboard/pharmacy' : '/dashboard'
+  const dashboardHref = currentUserType === 'pharmacy' ? '/dashboard/pharmacy' : '/dashboard/hospital'
 
   const menuItems: SidebarItem[] = [
     { label: 'Dashboard', icon: <FiHome />, href: dashboardHref },
     ...(currentUserType === 'hospital'
       ? [
+          { label: 'Appointments', icon: <FiShoppingCart />, href: '/dashboard/hospital/appointments' },
+          { label: 'Doctors', icon: <FiLayout />, href: '/dashboard/hospital/doctors' },
+          { label: 'Patients', icon: <FiInfo />, href: '/dashboard/hospital/patients' },
+          { label: 'Queue Management', icon: <FiPackage />, href: '/dashboard/hospital/queue' },
+          { label: 'Notifications', icon: <FiMessageSquare />, href: '/dashboard/hospital/notifications' },
+          { label: 'Emergency', icon: <FiGlobe />, href: '/dashboard/hospital/emergency' },
           { label: 'Hospital Setup', icon: <FiLayout />, href: '/dashboard/hospital/setup' },
           { label: 'My Website', icon: <FiGlobe />, href: '/dashboard/business-info' },
+          { label: 'Settings', icon: <FiSettings />, href: '/dashboard/hospital/settings' },
         ]
       : []),
     ...(currentUserType === 'pharmacy'
@@ -169,16 +176,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ userType, isOpen = true, onClo
     ...(currentUserType === 'pharmacy'
       ? [{ label: 'Business Info', icon: <FiInfo />, href: '/dashboard/business-info' }]
       : []),
-    {
-      label: currentUserType === 'pharmacy' ? 'Orders' : 'Appointments',
-      icon: <FiShoppingCart />,
-      href: '/dashboard/orders',
-    },
+    ...(currentUserType === 'pharmacy'
+      ? [
+          {
+            label: 'Orders',
+            icon: <FiShoppingCart />,
+            href: '/dashboard/orders',
+          },
+        ]
+      : []),
     // AI Assistant only for pharmacy; hospitals have chatbot on their public site
     ...(currentUserType === 'pharmacy'
       ? [{ label: 'AI Assistant', icon: <FiMessageSquare />, href: '/dashboard/ai-assistant' }]
       : []),
-    { label: 'Settings', icon: <FiSettings />, href: '/dashboard/settings' },
+    ...(currentUserType === 'pharmacy' ? [{ label: 'Settings', icon: <FiSettings />, href: '/dashboard/settings' }] : []),
   ]
 
   const typeLabel = currentUserType === 'pharmacy' ? 'Pharmacy' : 'Hospital'

@@ -2,6 +2,7 @@ import React from 'react';
 import { notFound } from 'next/navigation';
 import { getHospitalPages } from '@/lib/hospitalApi';
 import BlockRenderer from '@/components/hospital/BlockRenderer';
+import PublicHospitalHighlights from '@/components/hospital/PublicHospitalHighlights';
 
 interface PageProps {
     params: {
@@ -23,8 +24,9 @@ export default async function HospitalHomePage({ params }: PageProps) {
     }
 
     return (
-        <main className="min-h-screen bg-white">
+        <main className="min-h-screen bg-slate-50">
             <BlockRenderer blocks={homePage.blocks} subdomain={resolvedParams.subdomain} />
+            <PublicHospitalHighlights subdomain={resolvedParams.subdomain} />
         </main>
     );
 }

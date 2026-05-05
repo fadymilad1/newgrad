@@ -72,6 +72,8 @@ export interface AvailableSlotsResponse {
     slots: AvailableSlot[];
 }
 
+export type AppointmentStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED';
+
 export interface Appointment {
     id: string;
     patient_name: string;
@@ -79,10 +81,23 @@ export interface Appointment {
     patient_phone: string;
     start_datetime: string;
     end_datetime: string;
-    status: string;
+    status: AppointmentStatus;
     doctor: string;
     doctor_name: string;
     website_setup: string;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface HospitalProfile {
+    id: string;
+    name: string;
+    description: string;
+    logo: string | null;
+    subdomain: string | null;
+    theme_settings: Record<string, any>;
+    is_published: boolean;
+    timezone: string;
     created_at: string;
     updated_at: string;
 }

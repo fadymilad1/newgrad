@@ -9,7 +9,8 @@ import { Textarea } from '@/components/ui/Textarea'
 import { Toggle } from '@/components/ui/Toggle'
 import { PaymentModal } from '@/components/payment/PaymentModal'
 import { FiDollarSign, FiUser, FiPlus, FiTrash2 } from 'react-icons/fi'
-import { setScopedItem } from '@/lib/storage'
+import { getScopedItem, setScopedItem } from '@/lib/storage'
+import { websiteSetupApiV2 } from '@/lib/api'
 
 interface Feature {
   key: string
@@ -33,6 +34,40 @@ interface Department {
   doctors: Doctor[]
 }
 
+type FeatureState = Pick<
+  typeof DEFAULT_FORM_STATE,
+  'reviewSystem' | 'aiChatbot' | 'ambulanceOrdering' | 'patientPortal' | 'prescriptionRefill'
+>
+
+const HOSPITAL_DRAFT_KEY = 'hospitalSetupDraft'
+
+const createEmptyDoctor = (): Doctor => ({
+  name: '',
+  title: '',
+  specialization: '',
+  email: '',
+  experience: '',
+  certificates: [],
+  photo: null,
+})
+
+const createEmptyDepartment = (): Department => ({
+  name: '',
+  doctors: [createEmptyDoctor()],
+})
+
+const DEFAULT_FORM_STATE = {
+  // Features
+  reviewSystem: false,
+  aiChatbot: false,
+  ambulanceOrdering: false,
+  patientPortal: false,
+  prescriptionRefill: false,
+
+  // Departments with doctors
+  departments: [createEmptyDepartment()],
+}
+
 const FEATURES: Feature[] = [
   { key: 'reviewSystem', label: 'Review System', description: 'Allow patients to leave reviews and ratings', price: 19 },
   { key: 'aiChatbot', label: 'AI Chatbot', description: 'AI-powered chatbot for patient inquiries (monthly subscription)', price: 29 },
@@ -45,32 +80,8 @@ export default function HospitalSetupPage() {
   const router = useRouter()
   const [paymentOpen, setPaymentOpen] = useState(false)
   const [userType, setUserType] = useState<'hospital' | 'pharmacy'>('hospital')
-  const [formData, setFormData] = useState({
-    // Features
-    reviewSystem: false,
-    aiChatbot: false,
-    ambulanceOrdering: false,
-    patientPortal: false,
-    prescriptionRefill: false,
-    
-    // Departments with doctors
-    departments: [
-      {
-        name: '',
-        doctors: [
-          {
-            name: '',
-            title: '',
-            specialization: '',
-            email: '',
-            experience: '',
-            certificates: [],
-            photo: null,
-          },
-        ],
-      } as Department,
-    ],
-  })
+  const [formData, setFormData] = useState(DEFAULT_FORM_STATE)
+  const [isHydrated, setIsHydrated] = useState(false)
 
   // Check user type and redirect pharmacy users
   useEffect(() => {
@@ -87,6 +98,117 @@ export default function HospitalSetupPage() {
       }
     }
   }, [router])
+
+  useEffect(() => {
+    const hydrate = async () => {
+      let backendFeatures: Partial<FeatureState> | null = null
+      let storedFeatures: Partial<FeatureState> | null = null
+
+      try {
+        const token = localStorage.getItem('access_token')
+        if (token) {
+          const response = await websiteSetupApiV2.get()
+          const payload = response.data as any
+          const setup = Array.isArray(payload?.results)
+            ? payload.results[0]
+            : Array.isArray(payload)
+              ? payload[0]
+              : payload
+
+          if (setup) {
+            backendFeatures = {
+              reviewSystem: Boolean(setup.review_system),
+              aiChatbot: Boolean(setup.ai_chatbot),
+              ambulanceOrdering: Boolean(setup.ambulance_ordering),
+              patientPortal: Boolean(setup.patient_portal),
+              prescriptionRefill: Boolean(setup.prescription_refill),
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to load hospital feature setup from backend:', error)
+      }
+
+      try {
+        const storedRaw = getScopedItem('selectedFeatures')
+        if (storedRaw) {
+          const parsed = JSON.parse(storedRaw) as Partial<FeatureState>
+          storedFeatures = {
+            reviewSystem: Boolean(parsed.reviewSystem),
+            aiChatbot: Boolean(parsed.aiChatbot),
+            ambulanceOrdering: Boolean(parsed.ambulanceOrdering),
+            patientPortal: Boolean(parsed.patientPortal),
+            prescriptionRefill: Boolean(parsed.prescriptionRefill),
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to load stored hospital features:', error)
+      }
+
+      let draftFeatures: Partial<FeatureState> | null = null
+      let draftDepartments: Department[] | null = null
+
+      try {
+        const draftRaw = getScopedItem(HOSPITAL_DRAFT_KEY)
+        if (draftRaw) {
+          const parsed = JSON.parse(draftRaw) as {
+            features?: Partial<FeatureState>
+            departments?: Array<Record<string, unknown>>
+          }
+          if (parsed?.features && typeof parsed.features === 'object') {
+            draftFeatures = {
+              reviewSystem: Boolean(parsed.features.reviewSystem),
+              aiChatbot: Boolean(parsed.features.aiChatbot),
+              ambulanceOrdering: Boolean(parsed.features.ambulanceOrdering),
+              patientPortal: Boolean(parsed.features.patientPortal),
+              prescriptionRefill: Boolean(parsed.features.prescriptionRefill),
+            }
+          }
+
+          if (Array.isArray(parsed?.departments)) {
+            const cleanedDepartments = parsed.departments.map((dept) => {
+              const name = typeof dept?.name === 'string' ? dept.name : ''
+              const doctorsRaw = Array.isArray((dept as any)?.doctors) ? (dept as any).doctors : []
+              const doctors = doctorsRaw.map((doc: any) => ({
+                ...createEmptyDoctor(),
+                name: typeof doc?.name === 'string' ? doc.name : '',
+                title: typeof doc?.title === 'string' ? doc.title : '',
+                specialization: typeof doc?.specialization === 'string' ? doc.specialization : '',
+                email: typeof doc?.email === 'string' ? doc.email : '',
+                experience: typeof doc?.experience === 'string' ? doc.experience : '',
+              }))
+
+              return {
+                name,
+                doctors: doctors.length > 0 ? doctors : [createEmptyDoctor()],
+              } as Department
+            })
+
+            if (cleanedDepartments.length > 0) {
+              draftDepartments = cleanedDepartments
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to load hospital setup draft:', error)
+      }
+
+      const resolvedFeatures = backendFeatures || storedFeatures || draftFeatures || null
+      if (backendFeatures) {
+        setScopedItem('selectedFeatures', JSON.stringify(backendFeatures))
+      }
+
+      setFormData((prev) => ({
+        ...prev,
+        ...(resolvedFeatures || {}),
+        departments: draftDepartments || prev.departments,
+      }))
+
+      setIsHydrated(true)
+    }
+
+    void hydrate()
+  }, [])
 
   const handleDepartmentNameChange = (index: number, value: string) => {
     const newDepartments = [...formData.departments] as Department[]
@@ -195,6 +317,46 @@ export default function HospitalSetupPage() {
     return total
   }, [formData])
 
+  const featureState: FeatureState = useMemo(() => ({
+    reviewSystem: formData.reviewSystem,
+    aiChatbot: formData.aiChatbot,
+    ambulanceOrdering: formData.ambulanceOrdering,
+    patientPortal: formData.patientPortal,
+    prescriptionRefill: formData.prescriptionRefill,
+  }), [
+    formData.reviewSystem,
+    formData.aiChatbot,
+    formData.ambulanceOrdering,
+    formData.patientPortal,
+    formData.prescriptionRefill,
+  ])
+
+  useEffect(() => {
+    if (!isHydrated) return
+
+    setScopedItem('selectedFeatures', JSON.stringify(featureState))
+    setScopedItem('totalPrice', totalPrice.toString())
+
+    const persist = async () => {
+      try {
+        const token = localStorage.getItem('access_token')
+        if (!token) return
+        await websiteSetupApiV2.update({
+          review_system: featureState.reviewSystem,
+          ai_chatbot: featureState.aiChatbot,
+          ambulance_ordering: featureState.ambulanceOrdering,
+          patient_portal: featureState.patientPortal,
+          prescription_refill: featureState.prescriptionRefill,
+          total_price: totalPrice,
+        })
+      } catch (error) {
+        console.warn('Failed to auto-save hospital features:', error)
+      }
+    }
+
+    void persist()
+  }, [featureState, isHydrated, totalPrice])
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     // Open payment modal
@@ -203,8 +365,23 @@ export default function HospitalSetupPage() {
 
   const handlePaymentSuccess = async () => {
     // Store selected features (user-scoped)
-    setScopedItem('selectedFeatures', JSON.stringify(formData))
+    setScopedItem('selectedFeatures', JSON.stringify(featureState))
     setScopedItem('totalPrice', totalPrice.toString())
+
+    const draftDepartments = (formData.departments as Department[]).map((dept) => ({
+      name: dept.name,
+      doctors: dept.doctors.map((doctor) => ({
+        name: doctor.name,
+        title: doctor.title,
+        specialization: doctor.specialization,
+        email: doctor.email,
+        experience: doctor.experience,
+      })),
+    }))
+    setScopedItem(HOSPITAL_DRAFT_KEY, JSON.stringify({
+      features: featureState,
+      departments: draftDepartments,
+    }))
 
     // Save departments and doctors to the backend
     try {
@@ -270,7 +447,22 @@ export default function HospitalSetupPage() {
   }
 
   const handleSaveDraft = () => {
-    setScopedItem('selectedFeatures', JSON.stringify(formData))
+    const draftDepartments = (formData.departments as Department[]).map((dept) => ({
+      name: dept.name,
+      doctors: dept.doctors.map((doctor) => ({
+        name: doctor.name,
+        title: doctor.title,
+        specialization: doctor.specialization,
+        email: doctor.email,
+        experience: doctor.experience,
+      })),
+    }))
+
+    setScopedItem(HOSPITAL_DRAFT_KEY, JSON.stringify({
+      features: featureState,
+      departments: draftDepartments,
+    }))
+    setScopedItem('selectedFeatures', JSON.stringify(featureState))
     setScopedItem('totalPrice', totalPrice.toString())
     alert('Draft saved successfully!')
   }
@@ -309,7 +501,9 @@ export default function HospitalSetupPage() {
                     <Toggle
                       label={feature.label}
                       checked={formData[feature.key as keyof typeof formData] as boolean}
-                      onChange={(checked) => setFormData({ ...formData, [feature.key]: checked })}
+                      onChange={(checked) =>
+                        setFormData({ ...formData, [feature.key]: checked })
+                      }
                       description={feature.description}
                     />
                   </div>

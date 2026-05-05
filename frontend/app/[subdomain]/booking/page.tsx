@@ -24,7 +24,7 @@ export default async function HospitalBookingPage({ params }: PageProps) {
     }
 
     return (
-        <main className="min-h-screen bg-gray-50">
+        <main className="min-h-screen bg-slate-50">
             <BlockRenderer blocks={bookingPage.blocks} subdomain={resolvedParams.subdomain} />
         </main>
     );

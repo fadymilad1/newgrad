@@ -264,7 +264,23 @@ export const websiteSetupApiV2 = {
     patient_portal?: boolean
     prescription_refill?: boolean
   }) => {
-    return apiRequest('/website-setups/', {
+    const lookup = await apiRequest<any>('/website-setups/')
+    if (lookup.error) {
+      return lookup
+    }
+
+    const payload = lookup.data
+    const setup = Array.isArray(payload?.results)
+      ? payload.results[0]
+      : Array.isArray(payload)
+        ? payload[0]
+        : payload
+
+    if (!setup?.id) {
+      return { error: 'Website setup not found.', status: lookup.status }
+    }
+
+    return apiRequest(`/website-setups/${setup.id}/`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     })

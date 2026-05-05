@@ -68,7 +68,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick }) => {
     {
       label: 'Dashboard',
       description: 'Overview of your workspace',
-      href: '/dashboard',
+      getHref: (userType) => (userType === 'hospital' ? '/dashboard/hospital' : '/dashboard/pharmacy'),
       keywords: ['home', 'overview', 'progress', 'setup progress', 'stats'],
     },
     ...(currentUserType === 'hospital'
@@ -90,6 +90,27 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick }) => {
       description: 'Configure hospital website',
       href: '/dashboard/hospital/setup',
       keywords: ['hospital', 'setup', 'departments', 'services'],
+      userTypes: ['hospital'],
+    },
+    {
+      label: 'Appointments',
+      description: 'Manage patient appointments',
+      href: '/dashboard/hospital/appointments',
+      keywords: ['hospital appointments', 'schedule', 'bookings'],
+      userTypes: ['hospital'],
+    },
+    {
+      label: 'Doctors',
+      description: 'View doctors directory',
+      href: '/dashboard/hospital/doctors',
+      keywords: ['doctors', 'specialists', 'directory'],
+      userTypes: ['hospital'],
+    },
+    {
+      label: 'Hospital Settings',
+      description: 'Hospital branding and notifications',
+      href: '/dashboard/hospital/settings',
+      keywords: ['hospital settings', 'appearance', 'notifications'],
       userTypes: ['hospital'],
     },
     {
