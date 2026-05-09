@@ -14,7 +14,7 @@ export default async function DoctorsListBlock({ settings, subdomain }: DoctorsL
     const title = settings.title || 'Our Specialists';
     const showCount = settings.show_count || 4;
 
-    let doctors = [];
+    let doctors: any[] = [];
     try {
         doctors = await getHospitalDoctors(subdomain);
     } catch (e) {

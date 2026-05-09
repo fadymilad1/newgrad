@@ -37,7 +37,7 @@ interface AIChatbotProps {
 }
 
 const FALLBACK_DISCLAIMER =
-  'Medical disclaimer: This assistant provides general educational information only. It does not replace a doctor, pharmacist, or emergency care.'
+  'Medical disclaimer: This assistant provides general educational information about medications only. It does not replace a doctor, pharmacist, or emergency care.'
 
 function createMessageId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -63,10 +63,10 @@ function deriveTenantSubdomain(explicitSubdomain?: string) {
 
 function buildWelcomeMessage(pharmacyName: string, pharmacyPhone: string) {
   const contactLine = pharmacyPhone
-    ? ` If your symptoms feel urgent or are getting worse, contact ${pharmacyPhone} or local emergency services.`
-    : ' If your symptoms feel urgent or are getting worse, contact a clinician or local emergency services.'
+    ? ` For personalized medical advice, please consult your pharmacist at ${pharmacyPhone}.`
+    : ' For personalized medical advice, please consult your pharmacist or doctor.'
 
-  return `${pharmacyName} medical assistant is ready. Describe your symptoms and I will help with follow-up questions, possible conditions, recommended specialties, and general guidance.${contactLine}`
+  return `Welcome to the ${pharmacyName} AI Pharmacy Assistant. Ask me questions about medications, dosages, warnings, and side effects. I will search our medical database to assist you.${contactLine}`
 }
 
 function trimDisclaimer(content: string, disclaimer?: string) {
@@ -114,11 +114,11 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
         disclaimer: FALLBACK_DISCLAIMER,
         follow_up_questions: [],
         possible_conditions: [],
-        recommended_specialties: ['General Practice'],
-        guidance: ['For emergencies, contact local emergency services immediately.'],
+        recommended_specialties: [],
+        guidance: ['Feel free to ask about any drug or medication.'],
         urgency: 'routine',
         seek_emergency_care: false,
-        confidence_note: 'The assistant will ask follow-up questions when symptom details are incomplete.',
+        confidence_note: 'I am an AI. Always consult a healthcare provider.',
       },
     },
   ])
@@ -366,8 +366,8 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
             <FiMessageSquare size={20} />
           </div>
           <div>
-            <div className="font-semibold">{pharmacyName} Medical AI</div>
-            <div className="text-xs text-white/75">Symptoms, follow-up questions, and care guidance</div>
+            <div className="font-semibold">{pharmacyName} Pharmacy AI</div>
+            <div className="text-xs text-white/75">Ask about medications and side effects</div>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -394,7 +394,7 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
             <div className="flex items-start gap-2">
               <FiShield className="mt-0.5 shrink-0" />
               <p>
-                This assistant offers general medical information only. For emergencies, call local emergency services.
+                This assistant provides information from medical databases (e.g., FDA). It does not provide personalized medical advice.
               </p>
             </div>
           </div>
@@ -420,7 +420,7 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
 
                   <p className="text-sm leading-relaxed whitespace-pre-line">
                     {chatMessage.streaming && chatMessage.content.length === 0
-                      ? 'Analyzing your symptoms...'
+                      ? 'Searching medical databases...'
                       : trimDisclaimer(chatMessage.content, chatMessage.assistant?.disclaimer)}
                   </p>
 
@@ -457,7 +457,7 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
                   {chatMessage.type === 'ai' && chatMessage.assistant?.guidance?.length ? (
                     <div className="mt-3 rounded-xl bg-slate-50 p-3">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                        General guidance
+                        Database Sources
                       </div>
                       <ul className="mt-2 space-y-1.5 text-xs text-slate-700">
                         {chatMessage.assistant.guidance.map((item) => (
@@ -507,7 +507,7 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
               <div className="flex justify-start">
                 <div className="bg-white border border-neutral-border rounded-2xl px-4 py-3 shadow-sm text-slate-600 flex items-center gap-2">
                   <FiLoader className="animate-spin" />
-                  <div className="text-sm">Preparing a medically safe response...</div>
+                  <div className="text-sm">Generating a safe response...</div>
                 </div>
               </div>
             ) : null}
@@ -552,7 +552,7 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
                     formRef.current?.requestSubmit()
                   }
                 }}
-                placeholder="Describe symptoms, duration, severity, and anything that makes them better or worse"
+                placeholder="e.g. What are the common side effects of Metformin?"
                 rows={2}
                 className="flex-1 px-4 py-2 border border-neutral-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm leading-relaxed min-h-[44px] max-h-40 resize-y"
                 disabled={isTyping || !enabled || !hasTenantContext}
@@ -567,7 +567,7 @@ export const AIChatbot: React.FC<AIChatbotProps> = ({
               </button>
             </div>
             <p className="text-xs text-neutral-gray mt-2 text-center leading-relaxed">
-              Medical AI triage assistant. It does not diagnose or prescribe. For emergency symptoms, contact local emergency services.
+              Medical AI assistant. It does not provide medical advice. For emergencies, contact local emergency services.
             </p>
           </form>
         </>

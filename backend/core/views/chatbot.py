@@ -77,19 +77,45 @@ class ChatbotAPIView(APIView):
 
         history = conversation.messages.exclude(id=user_message.id).order_by('created_at')
 
-        try:
-            chatbot_response = MedicalChatbotService.generate_response(
-                ai_settings=ai_settings,
-                history=history,
-                user_message=data['message'],
-                patient_profile=data.get('patient_profile'),
+        # Route to RAG system if it's a pharmacy template
+        if website_setup.template_id is not None:
+            from rag_model.services.rag_service import ask_rag
+            from core.services.chatbot import ChatbotResponse
+            
+            rag_result = ask_rag(data['message'])
+            
+            guidance_texts = [f"Source: {s['drug']} ({s['section']})" for s in rag_result["sources"][:3]]
+            if not guidance_texts:
+                guidance_texts = ["No specific medical sources were found in the database."]
+                
+            chatbot_response = ChatbotResponse(
+                answer=rag_result["answer"],
+                follow_up_questions=[],
+                possible_conditions=[],
+                recommended_specialties=["Pharmacy"],
+                guidance=guidance_texts,
+                urgency="routine",
+                seek_emergency_care=False,
+                confidence_note=f"RAG Confidence Score: {rag_result['confidence_score']}",
+                disclaimer="This is not medical advice.",
+                raw_model_output=rag_result["answer"]
             )
-        except ChatbotServiceError as exc:
-            chatbot_response = MedicalChatbotService.generate_fallback_response(
-                ai_settings=ai_settings,
-                user_message=data['message'],
-                reason=str(exc),
-            )
+            # Override model_id temporarily to save it correctly
+            ai_settings.model_id = rag_result["model"]
+        else:
+            try:
+                chatbot_response = MedicalChatbotService.generate_response(
+                    ai_settings=ai_settings,
+                    history=history,
+                    user_message=data['message'],
+                    patient_profile=data.get('patient_profile'),
+                )
+            except ChatbotServiceError as exc:
+                chatbot_response = MedicalChatbotService.generate_fallback_response(
+                    ai_settings=ai_settings,
+                    user_message=data['message'],
+                    reason=str(exc),
+                )
 
         assistant_message = ChatMessage.objects.create(
             conversation=conversation,
@@ -160,7 +186,7 @@ class ChatbotAPIView(APIView):
                     {'detail': 'subdomain is required for public chatbot requests.'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            website_setup = WebsiteSetup.objects.filter(subdomain=tenant_key).first()
+            website_setup = WebsiteSetup.objects.filter(subdomain__iexact=tenant_key).first()
             if not website_setup:
                 return Response({'detail': 'Website setup not found.'}, status=status.HTTP_404_NOT_FOUND)
 

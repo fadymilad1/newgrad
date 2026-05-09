@@ -109,7 +109,7 @@ def signup(request):
                 base_subdomain = user.email.split('@')[0]
                 subdomain = base_subdomain
                 counter = 1
-                while WebsiteSetup.objects.filter(subdomain=subdomain).exists():
+                while WebsiteSetup.objects.filter(subdomain__iexact=subdomain).exists():
                     subdomain = f"{base_subdomain}{counter}"
                     counter += 1
                     

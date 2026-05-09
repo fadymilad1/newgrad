@@ -120,7 +120,7 @@ class PublicHospitalViewSet(viewsets.ViewSet):
         subdomain = request.query_params.get('subdomain')
         if not subdomain:
             return None
-        return WebsiteSetup.objects.filter(subdomain=subdomain).first()
+        return WebsiteSetup.objects.filter(subdomain__iexact=subdomain).first()
 
     @action(detail=False, methods=['get'])
     def pages(self, request):
