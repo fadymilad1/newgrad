@@ -123,6 +123,16 @@ class PublicHospitalViewSet(viewsets.ViewSet):
         return WebsiteSetup.objects.filter(subdomain=subdomain).first()
 
     @action(detail=False, methods=['get'])
+    def profile(self, request):
+        website_setup = self.get_website_setup(request)
+        if not website_setup:
+            return Response({'error': 'subdomain required'}, status=status.HTTP_400_BAD_REQUEST)
+        profile = HospitalProfile.objects.filter(website_setup=website_setup).first()
+        if not profile:
+            return Response({'error': 'profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(HospitalProfileSerializer(profile).data)
+
+    @action(detail=False, methods=['get'])
     def pages(self, request):
         website_setup = self.get_website_setup(request)
         if not website_setup:

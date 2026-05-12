@@ -1,157 +1,573 @@
-'use client';
+'use client'
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  FiAlertCircle,
+  FiLoader,
+  FiMessageSquare,
+  FiMinimize2,
+  FiSend,
+  FiShield,
+  FiX,
+} from 'react-icons/fi'
 
-interface Message {
-    role: 'user' | 'assistant';
-    content: string;
+import {
+  API_BASE_URL,
+  chatbotApi,
+  getAuthToken,
+  type ChatbotAssistantPayload,
+  type ChatbotResponsePayload,
+} from '@/lib/api'
+
+type ChatMessage = {
+  id: string
+  type: 'ai' | 'user'
+  content: string
+  timestamp: string
+  assistant?: Partial<ChatbotAssistantPayload>
+  streaming?: boolean
 }
 
 interface HospitalChatWidgetProps {
-    subdomain: string;
+  hospitalName?: string
+  hospitalPhone?: string
+  subdomain: string
+  enabled?: boolean
+  useStreaming?: boolean
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+const FALLBACK_DISCLAIMER =
+  'Medical disclaimer: This assistant provides general educational information only. It does not replace a doctor or emergency care.'
 
-export default function HospitalChatWidget({ subdomain }: HospitalChatWidgetProps) {
-    const [open, setOpen] = useState(false);
-    const [messages, setMessages] = useState<Message[]>([
-        { role: 'assistant', content: "Hello, I'm the hospital assistant. How can I help you today?" }
-    ]);
-    const [input, setInput] = useState('');
-    const [loading, setLoading] = useState(false);
-    const messagesEndRef = useRef<HTMLDivElement>(null);
-    const conversationIdRef = useRef<string | null>(null);
+function createMessageId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID()
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
 
-    useEffect(() => {
-        if (open && messagesEndRef.current) {
-            messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+function buildWelcomeMessage(hospitalName: string, hospitalPhone: string) {
+  const contactLine = hospitalPhone
+    ? ` If your symptoms feel urgent or are getting worse, contact ${hospitalPhone} or local emergency services.`
+    : ' If your symptoms feel urgent or are getting worse, contact a clinician or local emergency services.'
+
+  return `${hospitalName} medical assistant is ready. Describe your symptoms and I will help with follow-up questions, possible conditions, recommended specialties, and general guidance.${contactLine}`
+}
+
+function trimDisclaimer(content: string, disclaimer?: string) {
+  if (!disclaimer) return content
+  const normalizedContent = content.trim()
+  const normalizedDisclaimer = disclaimer.trim()
+  if (normalizedContent.endsWith(normalizedDisclaimer)) {
+    return normalizedContent.slice(0, normalizedContent.length - normalizedDisclaimer.length).trim()
+  }
+  return content
+}
+
+function urgencyClasses(urgency?: string) {
+  switch (urgency) {
+    case 'emergency':
+      return 'bg-red-100 text-red-700 border-red-200'
+    case 'urgent':
+      return 'bg-amber-100 text-amber-800 border-amber-200'
+    case 'self_care':
+      return 'bg-emerald-100 text-emerald-700 border-emerald-200'
+    default:
+      return 'bg-slate-100 text-slate-700 border-slate-200'
+  }
+}
+
+export default function HospitalChatWidget({
+  hospitalName = 'Hospital',
+  hospitalPhone = '',
+  subdomain,
+  enabled = true,
+  useStreaming = true,
+}: HospitalChatWidgetProps) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [isMinimized, setIsMinimized] = useState(false)
+  const [message, setMessage] = useState('')
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: createMessageId(),
+      type: 'ai',
+      content: buildWelcomeMessage(hospitalName, hospitalPhone),
+      timestamp: new Date().toISOString(),
+      assistant: {
+        disclaimer: FALLBACK_DISCLAIMER,
+        follow_up_questions: [],
+        possible_conditions: [],
+        recommended_specialties: ['General Practice'],
+        guidance: ['For emergencies, contact local emergency services immediately.'],
+        urgency: 'routine',
+        seek_emergency_care: false,
+        confidence_note: 'The assistant will ask follow-up questions when symptom details are incomplete.',
+      },
+    },
+  ])
+  const [isTyping, setIsTyping] = useState(false)
+  const [conversationId, setConversationId] = useState<string>()
+  const [error, setError] = useState('')
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const formRef = useRef<HTMLFormElement>(null)
+
+  const hasTenantContext = useMemo(() => {
+    return Boolean(subdomain || getAuthToken())
+  }, [subdomain])
+
+  useEffect(() => {
+    if (isOpen && !isMinimized) {
+      inputRef.current?.focus()
+    }
+  }, [isOpen, isMinimized])
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  const syncAssistantMessage = (assistantMessageId: string, updater: (current: ChatMessage) => ChatMessage) => {
+    setMessages((prev) => prev.map((item) => (item.id === assistantMessageId ? updater(item) : item)))
+  }
+
+  const streamChatResponse = async (assistantMessageId: string, userText: string): Promise<void> => {
+    const token = getAuthToken()
+    const response = await fetch(`${API_BASE_URL}/chatbot/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        message: userText,
+        conversation_id: conversationId,
+        subdomain: subdomain || undefined,
+        stream: true,
+      }),
+    })
+
+    if (!response.ok || !response.body) {
+      let errorMessage = 'Unable to stream chatbot response.'
+      try {
+        const data = await response.json()
+        errorMessage = data.detail || data.error || errorMessage
+      } catch {
+        // Keep fallback error text.
+      }
+      throw new Error(errorMessage)
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const events = buffer.split('\n\n')
+      buffer = events.pop() || ''
+
+      for (const eventBlock of events) {
+        const lines = eventBlock.split('\n')
+        const eventType = lines.find((line) => line.startsWith('event:'))?.slice(6).trim()
+        const dataLine = lines.find((line) => line.startsWith('data:'))?.slice(5).trim()
+        if (!eventType || !dataLine) continue
+
+        const payload = JSON.parse(dataLine) as Record<string, unknown>
+
+        if (eventType === 'meta') {
+          const streamedConversationId = payload.conversation_id
+          if (typeof streamedConversationId === 'string') {
+            setConversationId(streamedConversationId)
+          }
+          continue
         }
-    }, [messages, open]);
 
-    const sendMessage = async () => {
-        const text = input.trim();
-        if (!text || loading) return;
+        if (eventType === 'chunk') {
+          const delta = typeof payload.delta === 'string' ? payload.delta : ''
+          syncAssistantMessage(assistantMessageId, (current) => ({
+            ...current,
+            content: `${current.content}${delta}`,
+            streaming: true,
+          }))
+          continue
+        }
 
-        const userMessage: Message = { role: 'user', content: text };
-        setMessages(prev => [...prev, userMessage]);
-        setInput('');
-        setLoading(true);
+        if (eventType === 'done') {
+          const donePayload = payload as unknown as ChatbotResponsePayload
+          setConversationId(donePayload.conversation_id)
+          syncAssistantMessage(assistantMessageId, (current) => ({
+            ...current,
+            content: donePayload.assistant.content,
+            assistant: donePayload.assistant,
+            streaming: false,
+          }))
+        }
+      }
+    }
+  }
 
+  const sendNonStreamingMessage = async (assistantMessageId: string, userText: string) => {
+    const response = await chatbotApi.sendMessage({
+      message: userText,
+      conversation_id: conversationId,
+      subdomain: subdomain || undefined,
+    })
+
+    if (response.error || !response.data) {
+      throw new Error(response.error || 'Unable to send message.')
+    }
+
+    setConversationId(response.data.conversation_id)
+    syncAssistantMessage(assistantMessageId, (current) => ({
+      ...current,
+      content: response.data!.assistant.content,
+      assistant: response.data!.assistant,
+      streaming: false,
+    }))
+  }
+
+  const handleSend = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!message.trim() || isTyping) return
+
+    if (!enabled) {
+      setError('This hospital has the medical chatbot disabled.')
+      return
+    }
+
+    if (!hasTenantContext) {
+      setError('Tenant context is missing. Configure a subdomain or open this page as the site owner.')
+      return
+    }
+
+    const userText = message.trim()
+    const assistantMessageId = createMessageId()
+
+    const userMessage: ChatMessage = {
+      id: createMessageId(),
+      type: 'user',
+      content: userText,
+      timestamp: new Date().toISOString(),
+    }
+
+    setMessages((prev) => [
+      ...prev,
+      userMessage,
+      {
+        id: assistantMessageId,
+        type: 'ai',
+        content: '',
+        timestamp: new Date().toISOString(),
+        assistant: {
+          disclaimer: FALLBACK_DISCLAIMER,
+          follow_up_questions: [],
+          possible_conditions: [],
+          recommended_specialties: [],
+          guidance: [],
+          urgency: 'routine',
+          seek_emergency_care: false,
+          confidence_note: '',
+        },
+        streaming: true,
+      },
+    ])
+    setMessage('')
+    setError('')
+    setIsTyping(true)
+
+    try {
+      if (useStreaming) {
         try {
-            const body: any = {
-                message: text,
-                subdomain,
-            };
-            if (conversationIdRef.current) {
-                body.conversation_id = conversationIdRef.current;
-            }
-
-            const res = await fetch(`${API_URL}/chatbot/`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            });
-
-            if (res.ok) {
-                const data = await res.json();
-                if (data.conversation_id) {
-                    conversationIdRef.current = data.conversation_id;
-                }
-                setMessages(prev => [...prev, { role: 'assistant', content: data.reply || 'Sorry, I could not respond right now.' }]);
-            } else {
-                setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' }]);
-            }
+          await streamChatResponse(assistantMessageId, userText)
         } catch {
-            setMessages(prev => [...prev, { role: 'assistant', content: 'Network error. Please check your connection.' }]);
-        } finally {
-            setLoading(false);
+          await sendNonStreamingMessage(assistantMessageId, userText)
         }
-    };
+      } else {
+        await sendNonStreamingMessage(assistantMessageId, userText)
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unable to get a response right now.'
+      setError(errorMessage)
+      syncAssistantMessage(assistantMessageId, (current) => ({
+        ...current,
+        content:
+          'I could not complete that request right now. Please try again in a moment or contact the hospital directly for urgent concerns.',
+        assistant: {
+          ...current.assistant,
+          disclaimer: FALLBACK_DISCLAIMER,
+          guidance: ['Contact the hospital or a licensed clinician if your symptoms need prompt review.'],
+          urgency: 'routine',
+        },
+        streaming: false,
+      }))
+    } finally {
+      setIsTyping(false)
+    }
+  }
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage();
-        }
-    };
-
+  if (!isOpen) {
     return (
-        <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
-            {/* Chat window */}
-            {open && (
-                <div className="w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-300"
-                    style={{ height: '460px' }}>
-                    {/* Header */}
-                    <div className="bg-gradient-to-r from-blue-600 to-teal-500 text-white px-4 py-3 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-sm font-bold">AI</div>
-                            <div>
-                                <p className="font-semibold text-sm">Hospital Assistant</p>
-                                <p className="text-xs text-blue-100">Live support guidance</p>
-                            </div>
-                        </div>
-                        <button onClick={() => setOpen(false)} className="text-white/70 hover:text-white text-xl leading-none">✕</button>
-                    </div>
+      <button
+        id="hospital-chat-toggle"
+        onClick={() => {
+          setIsOpen(true)
+          setIsMinimized(false)
+        }}
+        className="fixed bottom-6 right-6 w-16 h-16 bg-gradient-to-br from-blue-600 to-teal-500 rounded-full shadow-2xl flex items-center justify-center text-white hover:scale-110 transition-transform z-50 group"
+        aria-label="Open AI Symptom Chatbot"
+      >
+        <FiMessageSquare size={24} />
+        <span
+          className={`absolute -top-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${
+            enabled ? 'bg-emerald-400 animate-pulse' : 'bg-slate-400'
+          }`}
+        />
+        <span className="absolute bottom-full right-0 mb-2 px-3 py-1 bg-slate-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+          {enabled ? 'Medical AI assistant' : 'Chatbot unavailable'}
+        </span>
+      </button>
+    )
+  }
 
-                    {/* Messages */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
-                        {messages.map((msg, i) => (
-                            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm leading-relaxed ${
-                                    msg.role === 'user'
-                                        ? 'bg-blue-600 text-white rounded-br-sm'
-                                        : 'bg-white text-slate-800 border border-slate-200 rounded-bl-sm shadow-sm'
-                                }`}>
-                                    {msg.content}
-                                </div>
-                            </div>
-                        ))}
-                        {loading && (
-                            <div className="flex justify-start">
-                                <div className="bg-white border border-slate-200 rounded-2xl rounded-bl-sm px-4 py-2 shadow-sm">
-                                    <div className="flex gap-1 items-center h-4">
-                                        {[0, 1, 2].map(i => (
-                                            <div key={i} className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"
-                                                style={{ animationDelay: `${i * 150}ms` }} />
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                        <div ref={messagesEndRef} />
-                    </div>
-
-                    {/* Input */}
-                    <div className="border-t border-slate-200 p-3 bg-white flex gap-2">
-                        <input
-                            type="text"
-                            value={input}
-                            onChange={e => setInput(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            placeholder="Ask about appointments, departments..."
-                            className="flex-1 text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            disabled={loading}
-                        />
-                        <button
-                            onClick={sendMessage}
-                            disabled={loading || !input.trim()}
-                            className="bg-blue-600 text-white rounded-xl px-3 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                        >
-                            Send
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* Toggle button */}
-            <button
-                onClick={() => setOpen(prev => !prev)}
-                className="w-14 h-14 bg-gradient-to-r from-blue-600 to-teal-500 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center text-xl active:scale-95"
-                aria-label="Open chat assistant"
-            >
-                {open ? '✕' : 'AI'}
-            </button>
+  return (
+    <div
+      className={`fixed bottom-6 right-6 w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 flex flex-col transition-all duration-300 ${
+        isMinimized ? 'h-16' : 'h-[600px]'
+      }`}
+    >
+      {/* Header */}
+      <div className="bg-gradient-to-r from-blue-700 via-blue-600 to-teal-500 text-white p-4 rounded-t-2xl flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-white/15 rounded-full flex items-center justify-center border border-white/15">
+            <FiMessageSquare size={20} />
+          </div>
+          <div>
+            <div className="font-semibold">{hospitalName} Medical AI</div>
+            <div className="text-xs text-white/75">Symptoms, follow-up questions, and care guidance</div>
+          </div>
         </div>
-    );
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsMinimized(!isMinimized)}
+            className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+            aria-label={isMinimized ? 'Expand' : 'Minimize'}
+          >
+            <FiMinimize2 size={18} />
+          </button>
+          <button
+            onClick={() => setIsOpen(false)}
+            className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+            aria-label="Close"
+          >
+            <FiX size={18} />
+          </button>
+        </div>
+      </div>
+
+      {!isMinimized && (
+        <>
+          {/* Safety banner */}
+          <div className="border-b border-slate-100 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+            <div className="flex items-start gap-2">
+              <FiShield className="mt-0.5 shrink-0" />
+              <p>This assistant offers general medical information only. For emergencies, call local emergency services.</p>
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[radial-gradient(circle_at_top,#eff6ff,#f0fdfa_55%,#ffffff)]">
+            {messages.map((chatMessage) => (
+              <div
+                key={chatMessage.id}
+                className={`flex ${chatMessage.type === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div
+                  className={`max-w-[85%] rounded-2xl px-4 py-3 ${
+                    chatMessage.type === 'user'
+                      ? 'bg-gradient-to-br from-blue-600 to-teal-500 text-white shadow-lg shadow-blue-500/15'
+                      : 'bg-white/95 border border-slate-200 text-slate-800 shadow-sm backdrop-blur'
+                  }`}
+                >
+                  {/* Urgency badge */}
+                  {chatMessage.type === 'ai' && chatMessage.assistant?.urgency ? (
+                    <div
+                      className={`mb-3 inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.12em] ${urgencyClasses(chatMessage.assistant.urgency)}`}
+                    >
+                      {chatMessage.assistant.urgency.replace('_', ' ')}
+                    </div>
+                  ) : null}
+
+                  {/* Main content */}
+                  <p className="text-sm leading-relaxed whitespace-pre-line">
+                    {chatMessage.streaming && chatMessage.content.length === 0
+                      ? 'Analyzing your symptoms...'
+                      : trimDisclaimer(chatMessage.content, chatMessage.assistant?.disclaimer)}
+                  </p>
+
+                  {/* Possible conditions */}
+                  {chatMessage.type === 'ai' && chatMessage.assistant?.possible_conditions?.length ? (
+                    <div className="mt-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        Possible conditions
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {chatMessage.assistant.possible_conditions.map((item) => (
+                          <span key={item} className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {/* Recommended specialties */}
+                  {chatMessage.type === 'ai' && chatMessage.assistant?.recommended_specialties?.length ? (
+                    <div className="mt-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        Recommended specialties
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {chatMessage.assistant.recommended_specialties.map((item) => (
+                          <span key={item} className="rounded-full bg-blue-50 px-3 py-1 text-xs text-blue-700">
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {/* General guidance */}
+                  {chatMessage.type === 'ai' && chatMessage.assistant?.guidance?.length ? (
+                    <div className="mt-3 rounded-xl bg-slate-50 p-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        General guidance
+                      </div>
+                      <ul className="mt-2 space-y-1.5 text-xs text-slate-700">
+                        {chatMessage.assistant.guidance.map((item) => (
+                          <li key={item} className="leading-relaxed">
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {/* Follow-up questions */}
+                  {chatMessage.type === 'ai' && chatMessage.assistant?.follow_up_questions?.length ? (
+                    <div className="mt-3 rounded-xl border border-dashed border-slate-200 p-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        Follow-up questions
+                      </div>
+                      <ul className="mt-2 space-y-1.5 text-xs text-slate-700">
+                        {chatMessage.assistant.follow_up_questions.map((item) => (
+                          <li key={item} className="leading-relaxed">
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {/* Disclaimer */}
+                  {chatMessage.type === 'ai' && chatMessage.assistant?.disclaimer ? (
+                    <div className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                      {chatMessage.assistant.disclaimer}
+                    </div>
+                  ) : null}
+
+                  {/* Confidence note */}
+                  {chatMessage.type === 'ai' && chatMessage.assistant?.confidence_note ? (
+                    <div className="mt-2 text-[11px] text-slate-500">{chatMessage.assistant.confidence_note}</div>
+                  ) : null}
+
+                  {/* Timestamp */}
+                  <p className={`text-xs mt-2 ${chatMessage.type === 'user' ? 'text-white/70' : 'text-slate-400'}`}>
+                    {new Date(chatMessage.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              </div>
+            ))}
+
+            {/* Typing indicator */}
+            {isTyping ? (
+              <div className="flex justify-start">
+                <div className="bg-white border border-slate-200 rounded-2xl px-4 py-3 shadow-sm text-slate-600 flex items-center gap-2">
+                  <FiLoader className="animate-spin" />
+                  <div className="text-sm">Preparing a medically safe response...</div>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Error */}
+            {error ? (
+              <div className="flex justify-start">
+                <div className="max-w-[85%] rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
+                  <FiAlertCircle className="mt-0.5 shrink-0" />
+                  <div>{error}</div>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Chatbot disabled */}
+            {!enabled ? (
+              <div className="flex justify-start">
+                <div className="max-w-[85%] rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                  Chatbot access is disabled for this hospital.
+                </div>
+              </div>
+            ) : null}
+
+            {/* No tenant context */}
+            {enabled && !hasTenantContext ? (
+              <div className="flex justify-start">
+                <div className="max-w-[85%] rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                  Public tenant preview is unavailable until a Medify subdomain is configured.
+                </div>
+              </div>
+            ) : null}
+
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input */}
+          <form ref={formRef} onSubmit={handleSend} className="p-4 border-t border-slate-100 bg-white rounded-b-2xl">
+            <div className="flex gap-2">
+              <textarea
+                ref={inputRef}
+                id="hospital-chat-input"
+                value={message}
+                onChange={(event) => setMessage(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault()
+                    formRef.current?.requestSubmit()
+                  }
+                }}
+                placeholder="Describe symptoms, duration, severity, and anything that makes them better or worse"
+                rows={2}
+                className="flex-1 px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm leading-relaxed min-h-[44px] max-h-40 resize-y"
+                disabled={isTyping || !enabled || !hasTenantContext}
+              />
+              <button
+                id="hospital-chat-send"
+                type="submit"
+                disabled={!message.trim() || isTyping || !enabled || !hasTenantContext}
+                className="px-4 py-2 bg-gradient-to-r from-blue-600 to-teal-500 text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Send message"
+              >
+                <FiSend size={18} />
+              </button>
+            </div>
+            <p className="text-xs text-slate-400 mt-2 text-center leading-relaxed">
+              Medical AI triage assistant. It does not diagnose or prescribe. For emergency symptoms, contact local
+              emergency services.
+            </p>
+          </form>
+        </>
+      )}
+    </div>
+  )
 }

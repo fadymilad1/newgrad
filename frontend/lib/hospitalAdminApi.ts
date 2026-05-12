@@ -41,11 +41,18 @@ export const hospitalAdminApi = {
     return parseJson<HospitalProfile>(response);
   },
 
-  async updateProfile(payload: Partial<HospitalProfile>): Promise<ApiResponse<HospitalProfile>> {
+  async updateProfile(payload: Partial<HospitalProfile> | FormData): Promise<ApiResponse<HospitalProfile>> {
+    const isFormData = payload instanceof FormData;
+    
+    // For FormData, do not set Content-Type so the browser sets it with the boundary
+    const headers: HeadersInit = isFormData 
+        ? { ...(getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {}) }
+        : authHeaders();
+
     const response = await fetch(`${API_BASE_URL}/hospital/admin/profile/profile/`, {
       method: 'PATCH',
-      headers: authHeaders(),
-      body: JSON.stringify(payload),
+      headers,
+      body: isFormData ? payload : JSON.stringify(payload),
       cache: 'no-store',
     });
     return parseJson<HospitalProfile>(response);
