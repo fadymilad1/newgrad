@@ -3,10 +3,21 @@ import {
     Doctor,
     Department,
     AvailableSlotsResponse,
-    Appointment
+    Appointment,
+    HospitalProfile
 } from '@/types/hospital';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+
+export async function getHospitalProfile(subdomain: string): Promise<HospitalProfile | null> {
+    const res = await fetch(`${API_BASE}/api/hospital/public/profile/?subdomain=${subdomain}`, {
+        next: { revalidate: 60 }
+    });
+    if (!res.ok) {
+        return null;
+    }
+    return res.json();
+}
 
 export async function getHospitalPages(subdomain: string): Promise<HospitalPage[]> {
     const res = await fetch(`${API_BASE}/api/hospital/public/pages/?subdomain=${subdomain}`, {

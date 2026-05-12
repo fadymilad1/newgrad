@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 from core.models import ChatConversation, ChatMessage, TemplateAISettings, WebsiteSetup
 from core.serializers import ChatConversationSerializer, ChatbotRequestSerializer
 from core.services import ChatbotServiceError, MedicalChatbotService
+from rag_model.rag_service import RAGService
 
 
 class ChatbotAPIView(APIView):
@@ -77,45 +78,41 @@ class ChatbotAPIView(APIView):
 
         history = conversation.messages.exclude(id=user_message.id).order_by('created_at')
 
-        # Route to RAG system if it's a pharmacy template
-        if website_setup.template_id is not None:
-            from rag_model.services.rag_service import ask_rag
-            from core.services.chatbot import ChatbotResponse
-            
-            rag_result = ask_rag(data['message'])
-            
-            guidance_texts = [f"Source: {s['drug']} ({s['section']})" for s in rag_result["sources"][:3]]
-            if not guidance_texts:
-                guidance_texts = ["No specific medical sources were found in the database."]
-                
-            chatbot_response = ChatbotResponse(
-                answer=rag_result["answer"],
-                follow_up_questions=[],
-                possible_conditions=[],
-                recommended_specialties=["Pharmacy"],
-                guidance=guidance_texts,
-                urgency="routine",
-                seek_emergency_care=False,
-                confidence_note=f"RAG Confidence Score: {rag_result['confidence_score']}",
-                disclaimer="This is not medical advice.",
-                raw_model_output=rag_result["answer"]
-            )
-            # Override model_id temporarily to save it correctly
-            ai_settings.model_id = rag_result["model"]
-        else:
-            try:
+        # If this tenant is a pharmacy, prefer RAG-based answers (evidence-grounded)
+        chatbot_response = None
+        try:
+            if getattr(website_setup.user, 'business_type', '') == 'pharmacy':
+                rag = RAGService()
+                rag_result = rag.ask(data['message'])
+                # construct a lightweight ChatbotResponse-compatible object
+                class _R:
+                    pass
+
+                _r = _R()
+                _r.answer = rag_result.get('answer')
+                _r.follow_up_questions = []
+                _r.possible_conditions = []
+                _r.recommended_specialties = []
+                _r.guidance = []
+                _r.urgency = 'routine'
+                _r.seek_emergency_care = False
+                _r.confidence_note = f"retrieval_confidence={rag_result.get('confidence', 0):.2f}"
+                _r.disclaimer = ai_settings.disclaimer
+                _r.raw_model_output = rag_result.get('raw_model_output', '')
+                chatbot_response = _r
+            else:
                 chatbot_response = MedicalChatbotService.generate_response(
                     ai_settings=ai_settings,
                     history=history,
                     user_message=data['message'],
                     patient_profile=data.get('patient_profile'),
                 )
-            except ChatbotServiceError as exc:
-                chatbot_response = MedicalChatbotService.generate_fallback_response(
-                    ai_settings=ai_settings,
-                    user_message=data['message'],
-                    reason=str(exc),
-                )
+        except ChatbotServiceError as exc:
+            chatbot_response = MedicalChatbotService.generate_fallback_response(
+                ai_settings=ai_settings,
+                user_message=data['message'],
+                reason=str(exc),
+            )
 
         assistant_message = ChatMessage.objects.create(
             conversation=conversation,
@@ -186,7 +183,7 @@ class ChatbotAPIView(APIView):
                     {'detail': 'subdomain is required for public chatbot requests.'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            website_setup = WebsiteSetup.objects.filter(subdomain__iexact=tenant_key).first()
+            website_setup = WebsiteSetup.objects.filter(subdomain=tenant_key).first()
             if not website_setup:
                 return Response({'detail': 'Website setup not found.'}, status=status.HTTP_404_NOT_FOUND)
 

@@ -46,7 +46,7 @@ SPECIALTY_KEYWORDS = {
     'General Practice': ['fever', 'fatigue', 'body aches', 'infection'],
 }
 
-SYSTEM_PROMPT_TEMPLATE = """You are MedifyCare, a cautious medical triage assistant embedded inside a pharmacy website.
+SYSTEM_PROMPT_TEMPLATE = """You are MedifyCare, a cautious medical triage assistant embedded inside a healthcare website.
 
 Your job:
 - Collect symptoms and ask focused follow-up questions when history is incomplete.
