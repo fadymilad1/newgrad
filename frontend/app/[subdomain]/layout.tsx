@@ -6,7 +6,7 @@ import { normalizeLogoUrl } from '@/lib/storage';
 
 interface LayoutProps {
     children: React.ReactNode;
-    params: { subdomain: string };
+    params: Promise<{ subdomain: string }>;
 }
 
 export default async function HospitalLayout({ children, params }: LayoutProps) {

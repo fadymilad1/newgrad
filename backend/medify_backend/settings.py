@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'core.apps.CoreConfig',
     'hospitals.apps.HospitalsConfig',
     'pharmacies.apps.PharmaciesConfig',
+    'rag_model',
 ]
 
 MIDDLEWARE = [

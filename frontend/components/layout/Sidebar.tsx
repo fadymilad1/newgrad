@@ -41,65 +41,65 @@ export const Sidebar: React.FC<SidebarProps> = ({ userType, isOpen = true, onClo
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [unseenOrdersCount, setUnseenOrdersCount] = useState(0)
 
-  useEffect(() => {
-    let resolvedUserType: 'hospital' | 'pharmacy' = userType || 'hospital'
+  const loadBusinessInfo = useCallback((resolvedUserType: 'hospital' | 'pharmacy') => {
     let resolvedBrandName = 'Medify'
     let resolvedBrandLogo: string | null = null
 
-    // Get user context from localStorage (same method as dashboard)
     const userData = localStorage.getItem('user')
     if (userData) {
       try {
-        const user = JSON.parse(userData) as {
-          name?: string
-          businessType?: 'hospital' | 'pharmacy'
-          business_type?: 'hospital' | 'pharmacy'
-          logo?: string
-          logo_url?: string
-        }
-        resolvedUserType = user.businessType || user.business_type || 'hospital'
-
+        const user = JSON.parse(userData) as any
         if (resolvedUserType === 'pharmacy') {
           resolvedBrandName = user.name || 'Medify'
           resolvedBrandLogo = normalizeLogoUrl(user.logo_url || user.logo)
         }
       } catch (e) {
-        // Fallback to hospital if parsing fails
+        // ignore
+      }
+    }
+
+    const businessInfoRaw = getScopedItem('businessInfo')
+    if (businessInfoRaw) {
+      try {
+        const businessInfo = JSON.parse(businessInfoRaw) as any
+        if (businessInfo.name?.trim()) {
+          resolvedBrandName = businessInfo.name.trim()
+        }
+        const businessLogo = normalizeLogoUrl(businessInfo.logo || businessInfo.logo_url)
+        if (businessLogo) {
+          resolvedBrandLogo = businessLogo
+        }
+      } catch {
+        // Ignore
+      }
+    }
+
+    setBrandName(resolvedBrandName)
+    setBrandLogo(resolvedBrandLogo)
+  }, [])
+
+  useEffect(() => {
+    let resolvedUserType: 'hospital' | 'pharmacy' = userType || 'hospital'
+
+    const userData = localStorage.getItem('user')
+    if (userData) {
+      try {
+        const user = JSON.parse(userData) as any
+        resolvedUserType = user.businessType || user.business_type || 'hospital'
+      } catch (e) {
         resolvedUserType = 'hospital'
       }
     } else if (userType) {
-      // Use prop if provided
       resolvedUserType = userType
     }
 
-    if (resolvedUserType === 'pharmacy') {
-      const businessInfoRaw = getScopedItem('businessInfo')
-      if (businessInfoRaw) {
-        try {
-          const businessInfo = JSON.parse(businessInfoRaw) as {
-            name?: string
-            logo?: string
-            logo_url?: string
-          }
-
-          if (businessInfo.name?.trim()) {
-            resolvedBrandName = businessInfo.name.trim()
-          }
-
-          const businessLogo = normalizeLogoUrl(businessInfo.logo || businessInfo.logo_url)
-          if (businessLogo) {
-            resolvedBrandLogo = businessLogo
-          }
-        } catch {
-          // Ignore malformed local business info payload
-        }
-      }
-    }
-
     setCurrentUserType(resolvedUserType)
-    setBrandName(resolvedBrandName)
-    setBrandLogo(resolvedBrandLogo)
-  }, [userType, pathname])
+    loadBusinessInfo(resolvedUserType)
+
+    const handleUpdate = () => loadBusinessInfo(resolvedUserType)
+    window.addEventListener('business-info-updated', handleUpdate)
+    return () => window.removeEventListener('business-info-updated', handleUpdate)
+  }, [userType, loadBusinessInfo])
 
   const loadUnseenOrdersCount = useCallback(async () => {
     if (currentUserType !== 'pharmacy') {
