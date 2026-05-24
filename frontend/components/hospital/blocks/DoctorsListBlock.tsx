@@ -1,5 +1,6 @@
 import React from 'react';
 import { getHospitalDoctors } from '@/lib/hospitalApi';
+import type { Doctor } from '@/types/hospital';
 import Link from 'next/link';
 
 interface DoctorsListBlockProps {
@@ -14,7 +15,11 @@ export default async function DoctorsListBlock({ settings, subdomain }: DoctorsL
     const title = settings.title || 'Our Specialists';
     const showCount = settings.show_count || 4;
 
+<<<<<<< HEAD
     let doctors: any[] = [];
+=======
+    let doctors: Doctor[] = [];
+>>>>>>> 27994aa5c8a40c295527fbc9918e70ceb6074de0
     try {
         doctors = await getHospitalDoctors(subdomain);
     } catch (e) {

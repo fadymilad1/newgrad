@@ -89,6 +89,7 @@ export default function DashboardPage() {
   const [pharmacyStats, setPharmacyStats] = useState<PharmacyStats>(defaultPharmacyStats)
   const [hasPharmacySetup, setHasPharmacySetup] = useState(false)
   const [hasBusinessInfo, setHasBusinessInfo] = useState(false)
+  const [hasBusinessLogo, setHasBusinessLogo] = useState(false)
   const [isPublished, setIsPublished] = useState(false)
   const [hospitalSubdomain, setHospitalSubdomain] = useState('')
   const [hospitalName, setHospitalName] = useState('')
@@ -194,9 +195,13 @@ export default function DashboardPage() {
       try {
         const parsed = JSON.parse(businessInfo)
         setHasBusinessInfo(Boolean(parsed?.name?.trim() || parsed?.hasLogo))
+        setHasBusinessLogo(Boolean(parsed?.logo || parsed?.logo_url || parsed?.hasLogo))
       } catch {
         setHasBusinessInfo(false)
+        setHasBusinessLogo(false)
       }
+    } else {
+      setHasBusinessLogo(false)
     }
 
     setIsPublished(getScopedItem('isPublished') === 'true')
@@ -313,7 +318,7 @@ export default function DashboardPage() {
           { label: 'Publish', completed: isPublished },
         ]
       : [
-          { label: 'Upload Logo', completed: hasBusinessInfo && Boolean(getScopedItem('businessInfo') && JSON.parse(getScopedItem('businessInfo') || '{}')?.logo) },
+          { label: 'Upload Logo', completed: hasBusinessLogo },
           { label: 'Hospital Setup', completed: Boolean(selectedFeatures) },
           { label: 'Business Info', completed: hasBusinessInfo },
           { label: 'Publish', completed: isPublished },
