@@ -147,6 +147,7 @@ export default function LoginPage() {
                   if (errors.password) setErrors({ ...errors, password: '' })
                 }}
                 error={errors.password}
+                showPasswordToggle
                 required
               />
               <div className="flex items-center justify-between mt-2">

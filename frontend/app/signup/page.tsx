@@ -225,6 +225,7 @@ function SignupForm() {
                   if (errors.password) setErrors({ ...errors, password: '' })
                 }}
                 error={errors.password}
+                showPasswordToggle
                 required
               />
 
@@ -238,6 +239,7 @@ function SignupForm() {
                   if (errors.confirmPassword) setErrors({ ...errors, confirmPassword: '' })
                 }}
                 error={errors.confirmPassword}
+                showPasswordToggle
                 required
               />
 

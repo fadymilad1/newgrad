@@ -20,6 +20,7 @@ class Doctor(models.Model):
     name = models.CharField(max_length=255)
     specialty = models.CharField(max_length=255)
     bio = models.TextField(blank=True)
+    image = models.ImageField(upload_to='doctor_images/', null=True, blank=True)
     image_url = models.URLField(blank=True, null=True)
     is_active = models.BooleanField(default=True)
     

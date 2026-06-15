@@ -114,6 +114,13 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuClick }) => {
       userTypes: ['hospital'],
     },
     {
+      label: 'UI Theme & Customization',
+      description: 'Customize colors, fonts, and layout of your public hospital website',
+      href: '/dashboard/hospital/customization',
+      keywords: ['theme', 'colors', 'font', 'ui', 'design', 'customization', 'branding', 'style', 'background', 'button', 'text color', 'font size', 'preset'],
+      userTypes: ['hospital'],
+    },
+    {
       label: 'Pharmacy Setup',
       description: 'Create pharmacy website',
       href: '/dashboard/pharmacy/setup',

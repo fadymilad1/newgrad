@@ -10,7 +10,7 @@ from rest_framework.views import APIView
 
 from core.models import ChatConversation, ChatMessage, TemplateAISettings, WebsiteSetup
 from core.serializers import ChatConversationSerializer, ChatbotRequestSerializer
-from core.services import ChatbotServiceError, MedicalChatbotService
+from core.services.chatbot import ChatbotServiceError, MedicalChatbotService
 from rag_model.rag_service import RAGService
 
 
@@ -54,10 +54,28 @@ class ChatbotAPIView(APIView):
         if isinstance(website_setup, Response):
             return website_setup
 
+        # ── Subscription gate (hospital users only) ──────────────────────────
+        # Pharmacy users use the RAG pipeline which is not plan-gated.
+        if getattr(website_setup.user, 'business_type', '') == 'hospital':
+            from core.services.subscription import has_feature_access
+            if not has_feature_access(website_setup, 'ai_chatbot'):
+                return Response(
+                    {
+                        'detail': (
+                            'This feature is not included in your current plan. '
+                            'Please upgrade your subscription to access the AI chatbot.'
+                        ),
+                        'code': 'FEATURE_LOCKED',
+                        'feature': 'ai_chatbot',
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
         ai_settings = self._get_ai_settings(website_setup)
         rate_limit_response = self._enforce_rate_limit(request, website_setup, ai_settings)
         if rate_limit_response is not None:
             return rate_limit_response
+
 
         conversation = self._get_or_create_conversation(
             website_setup=website_setup,

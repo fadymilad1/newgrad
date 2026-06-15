@@ -8,7 +8,7 @@ Medify is a full-stack application (Next.js frontend + Django REST API backend) 
 
 - **🏥 Hospital Websites** - Feature-based website creation with customizable modules
 - **💊 Pharmacy Websites** - Template-based website creation with pre-designed layouts
-- **🤖 AI Assistant** - Intelligent content generation and website management
+- **🤖 AI Assistant** -  Chatbot for patins and rag model 
 
 ## Project Structure
 
@@ -66,11 +66,21 @@ Medify is a full-stack application (Next.js frontend + Django REST API backend) 
 cd backend
 
 # (first time) create & activate virtualenv
-python -m venv venv
-venv\Scripts\activate           # Windows
+# from backend/ (venv active or not)
+deactivate  # if the venv is active
+
+Remove-Item -Recurse -Force venv
+
+# create venv with a supported Python (pick one you have installed)
+py -3.11 -m venv venv
+# or: py -3.10 -m venv venv
+
+venv\Scripts\Activate.ps1
+
 # source venv/bin/activate      # Mac/Linux
 
 # install dependencies
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 
 # copy environment template and adjust if needed
@@ -177,3 +187,5 @@ For backend API setup, endpoints, and PostgreSQL configuration, see:
 ## License
 
 This project is part of a full-stack development task.
+
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned

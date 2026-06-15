@@ -1,5 +1,6 @@
 from django.db import models
 from .user import User
+from core.services.subscription import PLAN_TYPE_CHOICES, SUBSCRIPTION_STATUS_CHOICES
 import uuid
 
 
@@ -7,6 +8,11 @@ class WebsiteSetup(models.Model):
     """Main website configuration for each user"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='website_setup')
+
+    plan_type = models.CharField(max_length=20, choices=PLAN_TYPE_CHOICES, default='BASIC')
+    subscription_status = models.CharField(max_length=20, choices=SUBSCRIPTION_STATUS_CHOICES, default='INACTIVE')
+    subscription_ends_at = models.DateTimeField(null=True, blank=True)
+    one_time_features = models.JSONField(default=list, blank=True)
 
     # Hospital features
     review_system = models.BooleanField(default=False)

@@ -4,8 +4,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { hospitalAdminApi } from '@/lib/hospitalAdminApi';
+import { normalizeCsvImageUrl } from '@/lib/productImage';
+import { normalizeLogoUrl } from '@/lib/storage';
 import type { Department, Doctor } from '@/types/hospital';
-import { FiPlus, FiEdit2, FiChevronDown, FiChevronRight, FiUpload, FiX, FiCheck, FiAlertCircle } from 'react-icons/fi';
+import { FiPlus, FiEdit2, FiTrash2, FiChevronDown, FiChevronRight, FiUpload, FiX, FiCheck, FiAlertCircle } from 'react-icons/fi';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -19,6 +21,9 @@ interface DoctorFormData {
   department: string;   // department id
   newDeptName: string;  // if creating new dept
   is_active: boolean;
+  image: File | null;
+  image_url: string;
+  imagePreview: string;
 }
 
 interface ImportRow {
@@ -29,11 +34,13 @@ interface ImportRow {
   experience: string;
   department: string;
   bio: string;
+  photo: string;
 }
 
 const EMPTY_FORM: DoctorFormData = {
   name: '', title: '', specialty: '', bio: '', email: '',
   experience: '', department: '', newDeptName: '', is_active: true,
+  image: null, image_url: '', imagePreview: '',
 };
 
 // ─── Small helpers ────────────────────────────────────────────────────────────
@@ -69,7 +76,9 @@ interface DoctorModalProps {
 
 function DoctorModal({ mode, initialData, departments, onClose, onSave, saving, error }: DoctorModalProps) {
   const [form, setForm] = useState<DoctorFormData>(initialData);
-  const set = (k: keyof DoctorFormData, v: string | boolean) => setForm(f => ({ ...f, [k]: v }));
+  const set = (k: keyof DoctorFormData, v: string | boolean | File | null) => setForm(f => ({ ...f, [k]: v }));
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const previewUrl = form.imagePreview || form.image_url;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
@@ -123,6 +132,65 @@ function DoctorModal({ mode, initialData, departments, onClose, onSave, saving, 
               onChange={e => set('bio', e.target.value)} />
           </Field>
 
+          <Field label="Photo">
+            <div className="flex items-center gap-4">
+              <div className="h-16 w-16 overflow-hidden rounded-xl border border-neutral-border bg-neutral-light flex items-center justify-center">
+                {previewUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={previewUrl} alt="Doctor" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-xs text-neutral-gray">No photo</span>
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] || null;
+                    setForm((prev) => ({
+                      ...prev,
+                      image: file,
+                      imagePreview: file ? URL.createObjectURL(file) : '',
+                      image_url: file ? '' : prev.image_url,
+                    }));
+                  }}
+                />
+                <Button type="button" variant="secondary" onClick={() => imageInputRef.current?.click()}>
+                  <FiUpload className="mr-2" /> Import Photo
+                </Button>
+                {previewUrl ? (
+                  <button
+                    type="button"
+                    onClick={() => setForm((prev) => ({ ...prev, image: null, imagePreview: '', image_url: '' }))}
+                    className="text-xs text-error hover:underline text-left"
+                  >
+                    Remove photo
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </Field>
+
+          <Field label="Photo URL">
+            <input
+              className={INPUT}
+              value={form.image_url}
+              placeholder="https://example.com/doctor.jpg"
+              onChange={(event) => {
+                const nextUrl = event.target.value;
+                setForm((prev) => ({
+                  ...prev,
+                  image_url: nextUrl,
+                  image: null,
+                  imagePreview: nextUrl.trim(),
+                }));
+              }}
+            />
+          </Field>
+
           <Field label="Department" required>
             <select className={INPUT} value={form.department} onChange={e => set('department', e.target.value)}>
               <option value="">-- Select department --</option>
@@ -150,11 +218,13 @@ function DoctorModal({ mode, initialData, departments, onClose, onSave, saving, 
           )}
         </div>
 
-        <div className="flex justify-end gap-3 p-6 border-t border-neutral-border">
-          <Button variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button variant="primary" onClick={() => onSave(form)} disabled={saving}>
-            {saving ? 'Saving…' : mode === 'add' ? 'Add Doctor' : 'Save Changes'}
-          </Button>
+        <div className="flex flex-col gap-3 p-6 border-t border-neutral-border sm:flex-row sm:items-center sm:justify-end">
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button>
+            <Button variant="primary" onClick={() => onSave(form)} disabled={saving}>
+              {saving ? 'Saving…' : mode === 'add' ? 'Add Doctor' : 'Save Changes'}
+            </Button>
+          </div>
         </div>
       </div>
     </div>
@@ -184,7 +254,7 @@ function ImportModal({ rows, departments, onClose, onConfirm, importing }: {
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-neutral-border text-left text-neutral-gray">
-                {['Name','Title','Specialty','Email','Experience','Department','Bio'].map(h => (
+                {['Photo','Name','Title','Specialty','Email','Experience','Department','Bio'].map(h => (
                   <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -192,6 +262,18 @@ function ImportModal({ rows, departments, onClose, onConfirm, importing }: {
             <tbody>
               {rows.map((r, i) => (
                 <tr key={i} className="border-b border-neutral-border/60 hover:bg-neutral-light/40">
+                  <td className="px-3 py-2">
+                    {r.photo ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={r.photo}
+                        alt=""
+                        className="h-8 w-8 rounded-full border border-neutral-border object-cover"
+                      />
+                    ) : (
+                      <span className="text-neutral-gray">--</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 font-medium text-neutral-dark">{r.name || <span className="text-error">Missing</span>}</td>
                   <td className="px-3 py-2 text-neutral-gray">{r.title}</td>
                   <td className="px-3 py-2 text-neutral-gray">{r.specialty}</td>
@@ -224,6 +306,54 @@ function ImportModal({ rows, departments, onClose, onConfirm, importing }: {
   );
 }
 
+// ─── Delete Confirm Modal ───────────────────────────────────────────────────
+
+function DeleteConfirmModal({ doctor, onCancel, onConfirm, deleting, error }: {
+  doctor: Doctor;
+  onCancel: () => void;
+  onConfirm: () => Promise<void>;
+  deleting: boolean;
+  error: string | null;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="flex items-start gap-4 p-6 border-b border-neutral-border">
+          <div className="h-11 w-11 rounded-full bg-red-50 text-error flex items-center justify-center">
+            <FiTrash2 size={18} />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold text-neutral-dark">Delete doctor</h2>
+            <p className="text-sm text-neutral-gray mt-1">
+              Are you sure you want to delete <span className="font-semibold text-neutral-dark">{doctor.name}</span>? This cannot be undone.
+            </p>
+          </div>
+        </div>
+
+        {error && (
+          <div className="px-6 pt-4">
+            <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              <FiAlertCircle className="flex-shrink-0" /> {error}
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end gap-3 p-6">
+          <Button variant="secondary" onClick={onCancel} disabled={deleting}>Cancel</Button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={deleting}
+            className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:opacity-50 disabled:cursor-not-allowed bg-red-600 text-white hover:bg-red-700"
+          >
+            {deleting ? 'Deleting...' : 'Delete Doctor'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function HospitalDoctorsPage() {
@@ -236,7 +366,9 @@ export default function HospitalDoctorsPage() {
   // Modal state
   const [addOpen, setAddOpen] = useState(false);
   const [editDoctor, setEditDoctor] = useState<Doctor | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Doctor | null>(null);
   const [modalSaving, setModalSaving] = useState(false);
+  const [modalDeleting, setModalDeleting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
 
   // Import state
@@ -303,6 +435,41 @@ export default function HospitalDoctorsPage() {
     return form.department;
   };
 
+  const buildDoctorPayload = (
+    form: DoctorFormData,
+    deptId: string,
+    bio: string,
+    includeActive: boolean,
+  ): FormData | {
+    name: string;
+    specialty: string;
+    bio: string;
+    department: string;
+    image_url?: string;
+    is_active?: boolean;
+  } => {
+    const imageUrl = form.image_url.trim();
+    if (form.image) {
+      const payload = new FormData();
+      payload.append('name', form.name.trim());
+      payload.append('specialty', form.specialty.trim());
+      payload.append('bio', bio);
+      payload.append('department', deptId);
+      payload.append('image', form.image);
+      if (includeActive) payload.append('is_active', String(form.is_active));
+      return payload;
+    }
+
+    return {
+      name: form.name.trim(),
+      specialty: form.specialty.trim(),
+      bio,
+      department: deptId,
+      ...(imageUrl ? { image_url: imageUrl } : {}),
+      ...(includeActive ? { is_active: form.is_active } : {}),
+    };
+  };
+
   // ── Add doctor ─────────────────────────────────────────────────────────────
   const handleAdd = async (form: DoctorFormData) => {
     if (!form.name.trim()) { setModalError('Name is required.'); return; }
@@ -312,7 +479,8 @@ export default function HospitalDoctorsPage() {
     const deptId = await resolveDepartment(form);
     if (!deptId) { setModalSaving(false); return; }
     const bio = [form.title, form.experience].filter(Boolean).join(' • ') || form.bio;
-    const res = await hospitalAdminApi.createDoctor({ name: form.name, specialty: form.specialty, bio, department: deptId });
+    const payload = buildDoctorPayload(form, deptId, bio, false);
+    const res = await hospitalAdminApi.createDoctor(payload);
     if (res.error || !res.data) { setModalError(res.error ?? 'Failed to create doctor.'); setModalSaving(false); return; }
     await hospitalAdminApi.createDefaultSchedules(res.data.id);
     await load();
@@ -329,13 +497,29 @@ export default function HospitalDoctorsPage() {
     const deptId = await resolveDepartment(form);
     if (!deptId) { setModalSaving(false); return; }
     const bio = form.bio || [form.title, form.experience].filter(Boolean).join(' • ');
-    const res = await hospitalAdminApi.updateDoctor(editDoctor.id, {
-      name: form.name, specialty: form.specialty, bio, department: deptId, is_active: form.is_active,
-    });
+    const payload = buildDoctorPayload(form, deptId, bio, true);
+    const res = await hospitalAdminApi.updateDoctor(editDoctor.id, payload);
     if (res.error) { setModalError(res.error); setModalSaving(false); return; }
     await load();
     setEditDoctor(null);
     setModalSaving(false);
+  };
+
+  const handleDelete = async (doc: Doctor) => {
+    setModalDeleting(true);
+    setModalError(null);
+    const res = await hospitalAdminApi.deleteDoctor(doc.id);
+    if (res.error) {
+      setModalError(res.error);
+      setModalDeleting(false);
+      return;
+    }
+    await load();
+    setDeleteTarget(null);
+    if (editDoctor?.id === doc.id) {
+      setEditDoctor(null);
+    }
+    setModalDeleting(false);
   };
 
   // ── Excel/CSV import ───────────────────────────────────────────────────────
@@ -356,6 +540,17 @@ export default function HospitalDoctorsPage() {
       experience: String(r['Experience'] ?? r['experience'] ?? '').trim(),
       department: String(r['Department'] ?? r['department'] ?? '').trim(),
       bio: String(r['Bio'] ?? r['bio'] ?? '').trim(),
+      photo: normalizeCsvImageUrl(String(
+        r['Photo'] ??
+        r['photo'] ??
+        r['Photo URL'] ??
+        r['photo_url'] ??
+        r['Image'] ??
+        r['image'] ??
+        r['image_url'] ??
+        r['Image URL'] ??
+        ''
+      )),
     })).filter(r => r.name);
     if (rows.length === 0) { alert('No valid rows found. Make sure your file has a "Name" column.'); return; }
     setImportRows(rows);
@@ -378,7 +573,13 @@ export default function HospitalDoctorsPage() {
         }
         if (!deptId) continue;
         const bio = row.bio || [row.title, row.experience].filter(Boolean).join(' • ');
-        const docRes = await hospitalAdminApi.createDoctor({ name: row.name, specialty: row.specialty || 'General', bio, department: deptId });
+        const docRes = await hospitalAdminApi.createDoctor({
+          name: row.name,
+          specialty: row.specialty || 'General',
+          bio,
+          department: deptId,
+          image_url: row.photo || undefined,
+        });
         if (docRes.data) { await hospitalAdminApi.createDefaultSchedules(docRes.data.id); created++; }
       } catch { /* skip bad rows */ }
     }
@@ -393,6 +594,7 @@ export default function HospitalDoctorsPage() {
   // ── Build edit initial form ─────────────────────────────────────────────────
   const editInitial = (doc: Doctor): DoctorFormData => {
     const parts = (doc.bio ?? '').split(' • ');
+    const resolvedImage = normalizeLogoUrl(doc.image_url_resolved || doc.image_url) || '';
     return {
       name: doc.name,
       title: parts[0] ?? '',
@@ -403,6 +605,9 @@ export default function HospitalDoctorsPage() {
       department: doc.department ?? '',
       newDeptName: '',
       is_active: doc.is_active,
+      image: null,
+      image_url: doc.image_url ?? '',
+      imagePreview: resolvedImage,
     };
   };
 
@@ -446,7 +651,7 @@ export default function HospitalDoctorsPage() {
 
       {/* Import tip */}
       <div className="text-xs text-neutral-gray bg-neutral-light border border-neutral-border rounded-lg px-4 py-2">
-        📋 <strong>Excel import columns:</strong> Name, Title, Specialty, Email, Experience, Department, Bio
+        📋 <strong>Excel import columns:</strong> Photo (URL), Name, Title, Specialty, Email, Experience, Department, Bio
         — departments are created automatically if they don&apos;t exist yet.
       </div>
 
@@ -486,12 +691,19 @@ export default function HospitalDoctorsPage() {
                 {/* Doctor rows */}
                 {isOpen && (
                   <div className="border-t border-neutral-border divide-y divide-neutral-border/60">
-                    {docs.map(doc => (
-                      <div key={doc.id} className="flex items-center gap-4 px-5 py-3 hover:bg-neutral-light/30 transition-colors">
-                        {/* Avatar */}
-                        <div className="h-10 w-10 flex-shrink-0 flex items-center justify-center rounded-full bg-primary-light text-primary text-sm font-bold">
-                          {initials(doc.name)}
-                        </div>
+                    {docs.map(doc => {
+                      const avatarUrl = normalizeLogoUrl(doc.image_url_resolved || doc.image_url) || '';
+                      return (
+                        <div key={doc.id} className="flex items-center gap-4 px-5 py-3 hover:bg-neutral-light/30 transition-colors">
+                          {/* Avatar */}
+                          <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-primary-light text-primary text-sm font-bold flex items-center justify-center">
+                            {avatarUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={avatarUrl} alt={doc.name} className="h-full w-full object-cover" />
+                            ) : (
+                              initials(doc.name)
+                            )}
+                          </div>
                         {/* Info */}
                         <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-4 gap-1 sm:gap-3">
                           <p className="font-medium text-neutral-dark truncate">{doc.name}</p>
@@ -507,16 +719,26 @@ export default function HospitalDoctorsPage() {
                             </span>
                           </div>
                         </div>
-                        {/* Edit */}
-                        <button
-                          type="button"
-                          onClick={() => { setModalError(null); setEditDoctor(doc); }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-neutral-border text-sm text-neutral-gray hover:bg-primary-light hover:text-primary hover:border-primary/30 transition-colors flex-shrink-0"
-                        >
-                          <FiEdit2 size={14} /> Edit
-                        </button>
-                      </div>
-                    ))}
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => { setModalError(null); setModalDeleting(false); setEditDoctor(doc); }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-neutral-border text-sm text-neutral-gray hover:bg-primary-light hover:text-primary hover:border-primary/30 transition-colors"
+                          >
+                            <FiEdit2 size={14} /> Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setModalError(null); setModalDeleting(false); setDeleteTarget(doc); }}
+                            disabled={modalDeleting}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-sm text-error hover:bg-red-50 transition-colors disabled:opacity-50"
+                          >
+                            <FiTrash2 size={14} /> Delete
+                          </button>
+                        </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </Card>
@@ -544,9 +766,20 @@ export default function HospitalDoctorsPage() {
           mode="edit"
           initialData={editInitial(editDoctor)}
           departments={departments}
-          onClose={() => setEditDoctor(null)}
+          onClose={() => { setEditDoctor(null); setModalDeleting(false); }}
           onSave={handleEdit}
           saving={modalSaving}
+          error={modalError}
+        />
+      )}
+
+      {/* Delete Confirm Modal */}
+      {deleteTarget && (
+        <DeleteConfirmModal
+          doctor={deleteTarget}
+          onCancel={() => { setDeleteTarget(null); setModalError(null); setModalDeleting(false); }}
+          onConfirm={() => handleDelete(deleteTarget)}
+          deleting={modalDeleting}
           error={modalError}
         />
       )}

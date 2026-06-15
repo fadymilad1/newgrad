@@ -260,7 +260,6 @@ export const websiteSetupApiV2 = {
     total_price?: number
     review_system?: boolean
     ai_chatbot?: boolean
-    ambulance_ordering?: boolean
     patient_portal?: boolean
     prescription_refill?: boolean
   }) => {

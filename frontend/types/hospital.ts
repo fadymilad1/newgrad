@@ -53,7 +53,9 @@ export interface Doctor {
     name: string;
     specialty: string;
     bio: string;
+    image?: string | null;
     image_url: string | null;
+    image_url_resolved?: string | null;
     is_active: boolean;
     department: string;
     department_name: string;

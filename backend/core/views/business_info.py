@@ -4,6 +4,7 @@ from rest_framework.response import Response
 
 from core.models import WebsiteSetup, BusinessInfo
 from core.serializers import BusinessInfoSerializer, BusinessInfoCreateUpdateSerializer
+from core.services.subscription import can_publish_hospital
 
 
 class BusinessInfoViewSet(viewsets.ModelViewSet):
@@ -57,7 +58,7 @@ class BusinessInfoViewSet(viewsets.ModelViewSet):
         serializer.save()
         response_serializer = BusinessInfoSerializer(business_info, context={'request': request})
         return Response(response_serializer.data)
-    
+
     def partial_update(self, request, *args, **kwargs):
         # Handle PATCH requests to /business-info/ (without ID)
         # This is called by the frontend
@@ -70,6 +71,28 @@ class BusinessInfoViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def publish(self, request):
+        """
+        Publish the hospital website.
+        Requires an active subscription OR a valid one-time payment.
+        Returns HTTP 402 with code SUBSCRIPTION_REQUIRED if access is denied.
+        """
+        website_setup, _ = WebsiteSetup.objects.get_or_create(
+            user=request.user,
+            defaults={'subdomain': request.user.email.split('@')[0]}
+        )
+
+        if not can_publish_hospital(website_setup):
+            return Response(
+                {
+                    'detail': (
+                        'You need an active subscription or purchased plan to publish your '
+                        'hospital website. Please upgrade your plan to continue.'
+                    ),
+                    'code': 'SUBSCRIPTION_REQUIRED',
+                },
+                status=status.HTTP_402_PAYMENT_REQUIRED,
+            )
+
         business_info = self.get_object()
         business_info.is_published = True
         business_info.save()

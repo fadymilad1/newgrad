@@ -19,6 +19,25 @@ export async function getHospitalProfile(subdomain: string): Promise<HospitalPro
     return res.json();
 }
 
+export interface HospitalBusinessInfo {
+    contact_phone: string;
+    contact_email: string;
+    address: string;
+    working_hours: Record<string, { open: string; close: string; closed: boolean }>;
+}
+
+export async function getHospitalBusinessInfo(subdomain: string): Promise<HospitalBusinessInfo | null> {
+    try {
+        const profile = await getHospitalProfile(subdomain);
+        if (!profile) return null;
+        const bi = (profile as any).business_info;
+        if (!bi) return null;
+        return bi as HospitalBusinessInfo;
+    } catch {
+        return null;
+    }
+}
+
 export async function getHospitalPages(subdomain: string): Promise<HospitalPage[]> {
     const res = await fetch(`${API_BASE}/api/hospital/public/pages/?subdomain=${subdomain}`, {
         next: { revalidate: 60 } // Cache for 60 seconds

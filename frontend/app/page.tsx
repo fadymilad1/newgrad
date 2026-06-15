@@ -68,7 +68,6 @@ export default function LandingPage() {
         'Pay once for each feature you enable (now much lower)',
         'AI Chatbot: $15/month subscription',
         'Review System: $20 one-time',
-        'Ambulance Ordering: $25 one-time',
       ],
     },
     {
@@ -237,9 +236,9 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white overflow-x-hidden w-full">
+    <div className="min-h-screen bg-white text-neutral-dark overflow-x-hidden w-full">
       {/* Navigation */}
-      <nav className="border-b border-neutral-border overflow-x-hidden w-full">
+      <nav className="sticky top-0 z-20 border-b border-neutral-border bg-white/80 backdrop-blur overflow-x-hidden w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between w-full">
           <Link href="/" className="flex items-center gap-2 sm:gap-3">
             <div className="relative h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0">
@@ -252,7 +251,7 @@ export default function LandingPage() {
                 priority
               />
             </div>
-            <span className="text-xl sm:text-2xl font-bold text-primary">Medify</span>
+            <span className="text-xl sm:text-2xl font-bold text-primary font-display">Medify</span>
           </Link>
           <div className="flex items-center gap-2 sm:gap-4">
             <Link href="/login" className="text-sm sm:text-base text-neutral-gray hover:text-primary transition-colors">
@@ -266,16 +265,23 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero Section */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 py-12 sm:py-20 overflow-x-hidden w-full">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-center">
+      <section className="relative hero-aurora py-14 sm:py-24 overflow-x-hidden w-full">
+        <div className="absolute -top-24 -right-12 h-64 w-64 rounded-full bg-primary-light opacity-60 blur-3xl" />
+        <div className="absolute bottom-0 -left-16 h-80 w-80 rounded-full bg-primary-light opacity-50 blur-3xl" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-14 items-center">
           <div className="order-2 md:order-1">
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-neutral-dark mb-4 sm:mb-6">
+            <div className="inline-flex items-center gap-2 rounded-full border border-neutral-border bg-white/80 px-4 py-2 text-xs sm:text-sm font-semibold text-primary shadow-sm animate-soft-rise">
+              <span className="h-2 w-2 rounded-full bg-primary" />
+              Built for hospitals and pharmacies
+            </div>
+            <h1 className="font-display text-4xl sm:text-5xl md:text-6xl leading-tight text-neutral-dark mt-5 mb-4 sm:mb-6 animate-soft-rise">
               Build Your Medical Website in Minutes
             </h1>
-            <p className="text-base sm:text-lg md:text-xl text-neutral-gray mb-6 sm:mb-10 max-w-2xl">
-              Create professional websites for hospitals and pharmacies with our easy-to-use platform.
+            <p className="text-base sm:text-lg md:text-xl text-neutral-gray mb-6 sm:mb-10 max-w-2xl animate-soft-rise">
+              Create professional websites for hospitals and pharmacies with a guided setup, modern templates, and an AI assistant ready to support your patients.
             </p>
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 animate-soft-rise">
               <Link href="/signup?type=hospital" className="flex-1 sm:flex-initial">
                 <Button variant="primary" className="w-full sm:w-auto text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4">
                   Create Hospital Website
@@ -287,9 +293,24 @@ export default function LandingPage() {
                 </Button>
               </Link>
             </div>
+            <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 text-sm">
+              {[
+                { title: 'Launch fast', value: 'Go live in days' },
+                { title: 'Secure checkout', value: 'Visa and Fawry ready' },
+                { title: 'AI Assistant', value: 'Support 24/7' },
+              ].map((item) => (
+                <div key={item.title} className="glass-card rounded-2xl px-4 py-3">
+                  <p className="text-neutral-gray text-xs uppercase tracking-[0.18em]">
+                    {item.title}
+                  </p>
+                  <p className="font-semibold text-neutral-dark mt-1">{item.value}</p>
+                </div>
+              ))}
+            </div>
           </div>
           <div className="relative h-64 sm:h-80 order-1 md:order-2 w-full max-w-full">
-            <div className="absolute inset-0 rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl w-full">
+            <div className="absolute -top-6 -left-4 h-24 w-24 rounded-3xl bg-primary-light opacity-80" />
+            <div className="absolute inset-0 rounded-3xl overflow-hidden shadow-xl bg-white w-full">
               <Image
                 src="/logo.png"
                 alt="Hospital website preview"
@@ -299,26 +320,31 @@ export default function LandingPage() {
                 sizes="(max-width: 768px) 100vw, 50vw"
               />
             </div>
+            <div className="absolute -bottom-5 right-6 glass-card rounded-2xl px-4 py-3 shadow-lg">
+              <p className="text-xs text-neutral-gray uppercase tracking-[0.16em]">AI Assistant</p>
+              <p className="font-semibold text-neutral-dark">Included</p>
+            </div>
           </div>
+        </div>
         </div>
       </section>
 
       {/* Steps Section */}
-      <section className="bg-neutral-light py-12 sm:py-20 overflow-x-hidden w-full">
+      <section className="section-glow py-12 sm:py-20 overflow-x-hidden w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full">
-          <h2 className="text-2xl sm:text-3xl font-bold text-center text-neutral-dark mb-8 sm:mb-12">
+          <h2 className="font-display text-3xl sm:text-4xl font-bold text-center text-neutral-dark mb-8 sm:mb-12">
             How It Works
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 mb-8 sm:mb-12">
             {/* Hospital Flow */}
             <div>
-              <h3 className="text-2xl font-semibold text-neutral-dark mb-6 text-center">
+              <h3 className="text-2xl font-semibold text-neutral-dark mb-6 text-center font-display">
                 Hospital
               </h3>
               <div className="space-y-6">
                 {steps.map((step) => (
-                  <div key={step.number} className="flex items-start gap-4">
-                    <div className="w-12 h-12 bg-primary text-white rounded-full flex items-center justify-center text-lg font-bold flex-shrink-0">
+                  <div key={step.number} className="flex items-start gap-4 glass-card rounded-2xl p-4">
+                    <div className="w-12 h-12 bg-primary text-white rounded-2xl flex items-center justify-center text-lg font-bold flex-shrink-0">
                       {step.number}
                     </div>
                     <div>
@@ -333,13 +359,13 @@ export default function LandingPage() {
             </div>
             {/* Pharmacy Flow */}
             <div>
-              <h3 className="text-2xl font-semibold text-neutral-dark mb-6 text-center">
+              <h3 className="text-2xl font-semibold text-neutral-dark mb-6 text-center font-display">
                 Pharmacy
               </h3>
               <div className="space-y-6">
                 {steps.map((step) => (
-                  <div key={step.number} className="flex items-start gap-4">
-                    <div className="w-12 h-12 bg-primary text-white rounded-full flex items-center justify-center text-lg font-bold flex-shrink-0">
+                  <div key={step.number} className="flex items-start gap-4 glass-card rounded-2xl p-4">
+                    <div className="w-12 h-12 bg-primary text-white rounded-2xl flex items-center justify-center text-lg font-bold flex-shrink-0">
                       {step.number}
                     </div>
                     <div>
@@ -359,9 +385,12 @@ export default function LandingPage() {
       {/* Pharmacy Templates */}
       <section className="py-12 sm:py-20 overflow-x-hidden w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full">
-          <h2 className="text-2xl sm:text-3xl font-bold text-center text-neutral-dark mb-8 sm:mb-12">
+          <h2 className="font-display text-3xl sm:text-4xl font-bold text-center text-neutral-dark mb-3">
             Pharmacy Templates
           </h2>
+          <p className="text-center text-neutral-gray mb-8 sm:mb-12 max-w-2xl mx-auto">
+            Choose a template that matches your pharmacy brand, then customize colors, content, and products.
+          </p>
           {/* Mobile: Single template with swipe (no inline styles) */}
           <div className="block md:hidden mb-6">
             <div
@@ -372,13 +401,13 @@ export default function LandingPage() {
             >
               <div className="px-2">
                 {templates[currentTemplate] && (
-                  <Card className="ring-2 ring-primary">
-                    <div className="h-64 bg-neutral-light rounded-t-lg flex items-center justify-center relative overflow-hidden w-full max-w-full">
+                  <Card className="ring-2 ring-primary overflow-hidden">
+                    <div className="h-64 bg-neutral-light rounded-t-2xl flex items-center justify-center relative overflow-hidden w-full max-w-full">
                       <Image
                         src={templates[currentTemplate].image}
                         alt={templates[currentTemplate].name}
                         fill
-                        className="object-contain bg-neutral-light"
+                        className="object-contain bg-neutral-light transition-transform duration-300"
                         sizes="100vw"
                       />
                     </div>
@@ -400,15 +429,15 @@ export default function LandingPage() {
             {templates.map((template, index) => (
               <Card
                 key={index}
-                className={`${index === currentTemplate ? 'ring-2 ring-primary' : ''} cursor-pointer`}
+                className={`${index === currentTemplate ? 'ring-2 ring-primary' : ''} cursor-pointer group overflow-hidden`}
                 onClick={() => setCurrentTemplate(index)}
               >
-                <div className="h-64 bg-neutral-light rounded-t-lg flex items-center justify-center relative overflow-hidden w-full max-w-full">
+                <div className="h-64 bg-neutral-light rounded-t-2xl flex items-center justify-center relative overflow-hidden w-full max-w-full">
                   <Image
                     src={template.image}
                     alt={template.name}
                     fill
-                    className="object-contain bg-neutral-light"
+                    className="object-contain bg-neutral-light transition-transform duration-300 group-hover:scale-105"
                     sizes="(max-width: 1024px) 50vw, 33vw"
                   />
                 </div>
@@ -426,7 +455,7 @@ export default function LandingPage() {
             <button
               type="button"
               onClick={handlePrevTemplate}
-              className="p-2 rounded-full border border-neutral-border text-neutral-gray hover:text-primary hover:border-primary transition-colors"
+              className="p-2 rounded-full border border-neutral-border text-neutral-gray hover:text-primary hover:border-primary transition-colors bg-white"
               aria-label="Previous template"
             >
               <FiChevronLeft size={20} />
@@ -447,7 +476,7 @@ export default function LandingPage() {
             <button
               type="button"
               onClick={handleNextTemplate}
-              className="p-2 rounded-full border border-neutral-border text-neutral-gray hover:text-primary hover:border-primary transition-colors"
+              className="p-2 rounded-full border border-neutral-border text-neutral-gray hover:text-primary hover:border-primary transition-colors bg-white"
               aria-label="Next template"
             >
               <FiChevronRight size={20} />
@@ -457,11 +486,11 @@ export default function LandingPage() {
       </section>
 
       {/* AI Assistant Feature */}
-      <section className="bg-neutral-light py-12 sm:py-20 overflow-x-hidden w-full">
+      <section className="section-glow py-12 sm:py-20 overflow-x-hidden w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-center">
             <div>
-              <h2 className="text-3xl font-bold text-neutral-dark mb-6">
+              <h2 className="font-display text-3xl sm:text-4xl font-bold text-neutral-dark mb-6">
                 AI-Powered Assistant for Patients
               </h2>
               <p className="text-lg text-neutral-gray mb-6">
@@ -476,8 +505,8 @@ export default function LandingPage() {
                 ))}
               </ul>
             </div>
-            <div className="bg-white rounded-lg p-6 sm:p-8 shadow-lg w-full max-w-full">
-              <div className="bg-neutral-light rounded-lg p-0 h-64 overflow-hidden relative w-full max-w-full">
+            <div className="glass-card rounded-3xl p-6 sm:p-8 shadow-lg w-full max-w-full">
+              <div className="bg-neutral-light rounded-2xl p-0 h-64 overflow-hidden relative w-full max-w-full">
                 <Image
                   src="/chatbot.webp"
                   alt="AI assistant chatbot helping build a medical website"
@@ -494,30 +523,30 @@ export default function LandingPage() {
       {/* Pricing Plans */}
       <section className="py-12 sm:py-20 overflow-x-hidden w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full">
-          <h2 className="text-2xl sm:text-3xl font-bold text-center text-neutral-dark mb-8 sm:mb-12">
+          <h2 className="font-display text-3xl sm:text-4xl font-bold text-center text-neutral-dark mb-8 sm:mb-12">
             Pricing Plans
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
             {pricingPlans.map((plan) => (
               <Card
                 key={plan.name}
-                className={`p-8 ${plan.popular ? 'ring-2 ring-primary' : ''}`}
+                className={`relative overflow-hidden p-8 ${plan.popular ? 'ring-2 ring-primary' : ''} before:content-[''] before:absolute before:inset-0 before:bg-gradient-to-br before:from-primary-light before:to-white before:opacity-0 before:transition-opacity hover:before:opacity-100`}
               >
                 {plan.popular && (
-                  <div className="bg-primary text-white text-sm font-medium px-3 py-1 rounded-full inline-block mb-4">
+                  <div className="bg-primary text-white text-sm font-medium px-3 py-1 rounded-full inline-block mb-4 relative z-10">
                     Most Popular
                   </div>
                 )}
-                <h3 className="text-2xl font-bold text-neutral-dark mb-2">
+                <h3 className="text-2xl font-bold text-neutral-dark mb-2 relative z-10">
                   {plan.name}
                 </h3>
-                <div className="mb-6">
+                <div className="mb-6 relative z-10">
                   <span className="text-4xl font-bold text-neutral-dark">
                     {plan.price}
                   </span>
                   <span className="text-neutral-gray"> {plan.period}</span>
                 </div>
-                <ul className="space-y-3 mb-8">
+                <ul className="space-y-3 mb-8 relative z-10">
                   {plan.features.map((feature) => (
                     <li key={feature} className="flex items-center gap-3">
                       <FiCheck className="text-success" size={20} />
@@ -525,7 +554,7 @@ export default function LandingPage() {
                     </li>
                   ))}
                 </ul>
-                <Button variant={plan.popular ? 'primary' : 'secondary'} className="w-full">
+                <Button variant={plan.popular ? 'primary' : 'secondary'} className="w-full relative z-10">
                   Get Started
                 </Button>
               </Card>
@@ -535,9 +564,9 @@ export default function LandingPage() {
       </section>
 
       {/* Testimonials */}
-      <section className="bg-neutral-light py-12 sm:py-20 overflow-x-hidden w-full">
+      <section className="section-glow py-12 sm:py-20 overflow-x-hidden w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full">
-          <h2 className="text-2xl sm:text-3xl font-bold text-center text-neutral-dark mb-8 sm:mb-12">
+          <h2 className="font-display text-3xl sm:text-4xl font-bold text-center text-neutral-dark mb-8 sm:mb-12">
             What Our Customers Say
           </h2>
           {/* Mobile: Single testimonial with swipe (no inline styles) */}
@@ -562,7 +591,7 @@ export default function LandingPage() {
                           <FiStar key={i} className="text-warning fill-warning" />
                         ))}
                     </div>
-                    <p className="text-neutral-gray mb-6">
+                    <p className="text-neutral-gray mb-6 italic">
                       {testimonials[testimonialIndex].content}
                     </p>
                     <div>
@@ -592,7 +621,7 @@ export default function LandingPage() {
                     <FiStar key={i} className="text-warning fill-warning" />
                   ))}
                 </div>
-                <p className="text-neutral-gray mb-6">{testimonial?.content}</p>
+                <p className="text-neutral-gray mb-6 italic">{testimonial?.content}</p>
                 <div>
                   <p className="font-semibold text-neutral-dark">
                     {testimonial?.name}
@@ -613,7 +642,7 @@ export default function LandingPage() {
                   testimonials.length ? (prev - 1 + testimonials.length) % testimonials.length : 0
                 )
               }
-              className="p-2 rounded-full border border-neutral-border text-neutral-gray hover:text-primary hover:border-primary transition-colors"
+              className="p-2 rounded-full border border-neutral-border text-neutral-gray hover:text-primary hover:border-primary transition-colors bg-white"
               aria-label="Previous testimonial"
             >
               <FiChevronLeft size={20} />
@@ -638,7 +667,7 @@ export default function LandingPage() {
                   testimonials.length ? (prev + 1) % testimonials.length : 0
                 )
               }
-              className="p-2 rounded-full border border-neutral-border text-neutral-gray hover:text-primary hover:border-primary transition-colors"
+              className="p-2 rounded-full border border-neutral-border text-neutral-gray hover:text-primary hover:border-primary transition-colors bg-white"
               aria-label="Next testimonial"
             >
               <FiChevronRight size={20} />
@@ -648,18 +677,18 @@ export default function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="bg-neutral-dark text-white py-8 sm:py-12 overflow-x-hidden w-full">
+      <footer className="bg-primary-dark text-white py-8 sm:py-12 overflow-x-hidden w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 w-full">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8 mb-6 sm:mb-8 text-center sm:text-left">
             <div>
-              <h3 className="text-xl font-bold mb-4">Medify</h3>
-              <p className="text-neutral-gray">
+              <h3 className="text-xl font-bold mb-4 font-display">Medify</h3>
+              <p className="text-white/70">
                 Building medical websites made simple.
               </p>
             </div>
             <div>
               <h4 className="font-semibold mb-4">Product</h4>
-              <ul className="space-y-2 text-neutral-gray">
+              <ul className="space-y-2 text-white/70">
                 <li>Features</li>
                 <li>Pricing</li>
                 <li>Templates</li>
@@ -667,7 +696,7 @@ export default function LandingPage() {
             </div>
             <div>
               <h4 className="font-semibold mb-4">Company</h4>
-              <ul className="space-y-2 text-neutral-gray">
+              <ul className="space-y-2 text-white/70">
                 <li>About</li>
                 <li>Blog</li>
                 <li>Contact</li>
@@ -675,14 +704,14 @@ export default function LandingPage() {
             </div>
             <div>
               <h4 className="font-semibold mb-4">Support</h4>
-              <ul className="space-y-2 text-neutral-gray">
+              <ul className="space-y-2 text-white/70">
                 <li>Help Center</li>
                 <li>Documentation</li>
                 <li>API</li>
               </ul>
             </div>
           </div>
-          <div className="border-t border-neutral-gray pt-8 text-center text-neutral-gray">
+          <div className="border-t border-white/20 pt-8 text-center text-white/70">
             <p>&copy; 2026 Medify. All rights reserved.</p>
           </div>
         </div>

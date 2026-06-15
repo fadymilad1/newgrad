@@ -9,6 +9,7 @@ import BookingButtonBlock from './blocks/BookingButtonBlock';
 import TextBlock from './blocks/TextBlock';
 import ImageBlock from './blocks/ImageBlock';
 import ContactBlock from './blocks/ContactBlock';
+import ContactBlockWrapper from './blocks/ContactBlockWrapper';
 
 function UnsupportedBlock({ type }: { type: string }) {
     const isDev = process.env.NODE_ENV === 'development';
@@ -58,7 +59,7 @@ export default function BlockRenderer({ blocks, subdomain }: BlockRendererProps)
                     case 'IMAGE_BLOCK':
                         return <ImageBlock key={block.id} settings={safeSettings} />;
                     case 'CONTACT_BLOCK':
-                        return <ContactBlock key={block.id} settings={safeSettings} />;
+                        return <ContactBlockWrapper key={block.id} settings={safeSettings} subdomain={subdomain} />;
                     default:
                         if (process.env.NODE_ENV === 'development') {
                             console.warn(`Unsupported block type: ${block.type}`);

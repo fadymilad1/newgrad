@@ -73,7 +73,16 @@ class DoctorViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         website_setup = _get_or_create_website_setup(self.request.user)
-        serializer.save(website_setup=website_setup)
+        payload = {'website_setup': website_setup}
+        if self.request.FILES.get('image'):
+            payload['image_url'] = ''
+        serializer.save(**payload)
+
+    def perform_update(self, serializer):
+        if self.request.FILES.get('image'):
+            serializer.save(image_url='')
+            return
+        serializer.save()
 
 
 class DoctorScheduleViewSet(viewsets.ModelViewSet):

@@ -9,7 +9,7 @@ gunicorn==21.2.0
 psycopg[binary]==3.3.3
 whitenoise==6.6.0
 huggingface_hub>=0.36.0
-faiss-cpu==1.8.0
+faiss-cpu==1.14.2
 sentence-transformers==3.0.1
 transformers==4.44.2
 torch==2.4.1

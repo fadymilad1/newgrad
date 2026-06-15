@@ -194,8 +194,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ userType, isOpen = true, onClo
   ]
 
   const typeLabel = currentUserType === 'pharmacy' ? 'Pharmacy' : 'Hospital'
-  // Strip the business-type suffix if it was included in the stored name (e.g. "elzz Pharmacy" → "elzz")
-  const cleanBrandName = brandName.replace(new RegExp(`\\s*${typeLabel}\\s*$`, 'i'), '').trim() || brandName
+  const stripHospitalWord = (value: string) =>
+    value
+      .replace(/\bhospital\b/gi, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+
+  // Strip redundant business-type labels from the stored name (e.g. "City Hospital" → "City").
+  const cleanBrandName = (
+    currentUserType === 'hospital'
+      ? stripHospitalWord(brandName)
+      : brandName.replace(new RegExp(`\\s*${typeLabel}\\s*$`, 'i'), '').trim()
+  ) || brandName
 
   // The dashboard root must be exact-match so it doesn't match every sub-route.
   // All other sidebar items use prefix-match so sub-pages also highlight the parent.

@@ -9,6 +9,14 @@ function authHeaders(): HeadersInit {
   };
 }
 
+function authHeadersForBody(body?: BodyInit | null): HeadersInit {
+  if (body instanceof FormData) {
+    const token = getAuthToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+  return authHeaders();
+}
+
 async function parseJson<T>(response: Response): Promise<ApiResponse<T>> {
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
@@ -71,17 +79,22 @@ export const hospitalAdminApi = {
     return { data: normalizeList<Doctor>(parsed.data), status: parsed.status };
   },
 
-  async createDoctor(payload: {
+  async createDoctor(payload: FormData | {
     name: string;
     specialty: string;
     bio?: string;
     department: string;
+    image_url?: string;
     is_active?: boolean;
   }): Promise<ApiResponse<Doctor>> {
+    const isFormData = payload instanceof FormData;
+    if (isFormData && !payload.has('is_active')) {
+      payload.append('is_active', 'true');
+    }
     const response = await fetch(`${API_BASE_URL}/hospital/admin/doctors/`, {
       method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ is_active: true, ...payload }),
+      headers: authHeadersForBody(isFormData ? payload : null),
+      body: isFormData ? payload : JSON.stringify({ is_active: true, ...payload }),
       cache: 'no-store',
     });
     return parseJson<Doctor>(response);
@@ -89,21 +102,32 @@ export const hospitalAdminApi = {
 
   async updateDoctor(
     id: string,
-    payload: Partial<{
+    payload: FormData | Partial<{
       name: string;
       specialty: string;
       bio: string;
       department: string;
+      image_url: string;
       is_active: boolean;
     }>,
   ): Promise<ApiResponse<Doctor>> {
+    const isFormData = payload instanceof FormData;
     const response = await fetch(`${API_BASE_URL}/hospital/admin/doctors/${id}/`, {
       method: 'PATCH',
-      headers: authHeaders(),
-      body: JSON.stringify(payload),
+      headers: authHeadersForBody(isFormData ? payload : null),
+      body: isFormData ? payload : JSON.stringify(payload),
       cache: 'no-store',
     });
     return parseJson<Doctor>(response);
+  },
+
+  async deleteDoctor(id: string): Promise<ApiResponse<void>> {
+    const response = await fetch(`${API_BASE_URL}/hospital/admin/doctors/${id}/`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+      cache: 'no-store',
+    });
+    return parseJson<void>(response);
   },
 
   // ─── Departments ───────────────────────────────────────────────────────────

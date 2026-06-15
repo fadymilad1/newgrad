@@ -9,6 +9,8 @@ import { Textarea } from '@/components/ui/Textarea'
 import { FileUpload } from '@/components/ui/FileUpload'
 import { FiMapPin, FiCheckCircle, FiGlobe } from 'react-icons/fi'
 import { getScopedItem, normalizeLogoUrl, setPublicSiteItem, setScopedItem } from '@/lib/storage'
+import { businessInfoApi } from '@/lib/api'
+import { useToast } from '@/components/ui/ToastProvider'
 import { pharmacyApi } from '@/lib/pharmacy'
 import dynamic from 'next/dynamic'
 
@@ -57,6 +59,7 @@ function toBackendWebsite(raw: string): string {
 
 export default function BusinessInfoPage() {
   const router = useRouter()
+  const { showToast } = useToast()
   const [isSavingDraft, setIsSavingDraft] = useState(false)
   const [isPublishing, setIsPublishing] = useState(false)
   const [isPublished, setIsPublished] = useState(false)
@@ -284,7 +287,7 @@ export default function BusinessInfoPage() {
     e.preventDefault()
     setIsPublishing(true)
     let latestLogoUrl = logoUrlForStorage
-    
+
     try {
       // Save to backend API first
       const token = localStorage.getItem('access_token')
@@ -293,6 +296,16 @@ export default function BusinessInfoPage() {
         if (latestLogoUrl) {
           setLogoUrlForStorage(latestLogoUrl)
         }
+      }
+      const publishRes = await businessInfoApi.publish()
+      if (publishRes.error) {
+        showToast({
+          type: 'error',
+          title: 'Publish failed',
+          message: publishRes.error,
+        })
+        setIsPublishing(false)
+        return
       }
       const businessInfoSnapshot = {
         name: formData.name,
@@ -307,11 +320,15 @@ export default function BusinessInfoPage() {
       setScopedItem('businessInfo', JSON.stringify(businessInfoSnapshot))
       setPublicSiteItem('businessInfo', JSON.stringify(businessInfoSnapshot))
 
-      // Backend save successful, no need for localStorage
       setScopedItem('isPublished', 'true')
       setPublicSiteItem('isPublished', 'true')
     } catch (error) {
       console.error('Failed to save business info to backend:', error)
+      showToast({
+        type: 'error',
+        title: 'Publish failed',
+        message: 'Unable to publish right now. Please try again.',
+      })
       // Only save to localStorage if backend fails (without logo to avoid quota)
       try {
         const businessInfoToSave = {
@@ -327,15 +344,15 @@ export default function BusinessInfoPage() {
           ? { ...businessInfoToSave, logo: logoUrlForStorage }
           : businessInfoToSave
         setScopedItem('businessInfo', JSON.stringify(fallbackSnapshot))
-        setScopedItem('isPublished', 'true')
         setPublicSiteItem('businessInfo', JSON.stringify(fallbackSnapshot))
-        setPublicSiteItem('isPublished', 'true')
       } catch (storageError) {
         console.error('Failed to save business info to localStorage:', storageError)
         // Continue anyway - user can retry
       }
+      setIsPublishing(false)
+      return
     }
-    
+
     setIsPublishing(false)
     setIsPublished(true)
 

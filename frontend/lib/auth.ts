@@ -1,4 +1,5 @@
 import { authApi, getRefreshToken } from '@/lib/api'
+import { getScopedItem, setScopedItem } from '@/lib/storage'
 
 type AuthTokens = {
   access: string
@@ -56,6 +57,30 @@ function clearUserScopedStorage(userId: string | null): void {
   }
 }
 
+function seedBusinessInfoName(userName?: string | null): void {
+  if (typeof window === 'undefined') return
+  const resolvedName = (userName || '').trim()
+  if (!resolvedName) return
+
+  const existing = getScopedItem('businessInfo')
+  if (existing) {
+    try {
+      const parsed = JSON.parse(existing) as Record<string, unknown>
+      const currentName = typeof parsed.name === 'string' ? parsed.name.trim() : ''
+      if (currentName) return
+      const nextPayload = { ...parsed, name: resolvedName }
+      setScopedItem('businessInfo', JSON.stringify(nextPayload))
+      window.dispatchEvent(new CustomEvent('business-info-updated'))
+      return
+    } catch {
+      // Fall through to reset below.
+    }
+  }
+
+  setScopedItem('businessInfo', JSON.stringify({ name: resolvedName }))
+  window.dispatchEvent(new CustomEvent('business-info-updated'))
+}
+
 export function persistAuthSession(payload: PersistAuthSessionPayload): void {
   if (typeof window === 'undefined') return
 
@@ -67,6 +92,8 @@ export function persistAuthSession(payload: PersistAuthSessionPayload): void {
   if (payload.websiteSetupId) {
     localStorage.setItem('website_setup_id', payload.websiteSetupId)
   }
+
+  seedBusinessInfoName(payload.user?.name)
 }
 
 export function clearAuthSession(): void {

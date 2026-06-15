@@ -46,7 +46,7 @@ def generate_default_hospital_template(website_setup):
         type=Block.BlockType.DOCTORS_LIST_BLOCK,
         order=3,
         settings={
-            "title": "Meet Our Specialists",
+            "title": "Meet Our Doctors",
             "show_count": 4
         }
     )
