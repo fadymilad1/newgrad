@@ -24,11 +24,22 @@ class PharmacySerializer(serializers.ModelSerializer):
             'theme_settings',
             'template_id',
             'is_published',
+            'google_sheet_url',
+            'google_sheet_sync_enabled',
+            'google_sheet_last_synced_at',
             'product_count',
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'product_count', 'created_at', 'updated_at']
+        read_only_fields = [
+            'id',
+            'product_count',
+            'google_sheet_url',
+            'google_sheet_sync_enabled',
+            'google_sheet_last_synced_at',
+            'created_at',
+            'updated_at',
+        ]
 
     def get_logo_url(self, obj):
         if not obj.logo:
@@ -145,6 +156,21 @@ class ProductBulkUploadSerializer(serializers.Serializer):
                 raise serializers.ValidationError(f"Row {idx}: each row must be a JSON object.")
 
         return value
+
+
+class ProductBulkUploadFromSheetSerializer(serializers.Serializer):
+    """Serializer for importing products from a public Google Sheet URL."""
+
+    url = serializers.URLField()
+    dry_run = serializers.BooleanField(required=False, default=False)
+    enable_live_sync = serializers.BooleanField(required=False, default=True)
+
+
+class ProductConnectGoogleSheetSerializer(serializers.Serializer):
+    """Connect a Google Sheet for live product synchronization."""
+
+    url = serializers.URLField()
+    webhook_url = serializers.URLField(required=False, allow_blank=True)
 
 
 class PharmacyOrderItemSerializer(serializers.ModelSerializer):

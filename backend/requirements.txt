@@ -16,3 +16,5 @@ torch==2.4.1
 requests==2.32.3
 numpy==1.26.4
 google-genai
+google-auth>=2.29.0
+google-api-python-client>=2.130.0

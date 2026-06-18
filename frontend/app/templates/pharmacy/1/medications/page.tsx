@@ -108,14 +108,13 @@ function MedicationsPageContent() {
 
   useEffect(() => {
     if (!isDemo) {
-      // Load from backend API when owner is logged in
       const fetchProducts = async () => {
         let loadedFromBackend = false
         
         try {
           const token = localStorage.getItem('access_token')
           if (token) {
-            const response = await fetch(`${API_URL}/pharmacy/products/`, {
+            const response = await fetch(`${API_URL}/pharmacy/products/?sync=1`, {
               headers: { 'Authorization': `Bearer ${token}` },
             })
             
@@ -126,7 +125,6 @@ function MedicationsPageContent() {
                 : Array.isArray((data as any)?.results)
                   ? (data as any).results
                   : []
-              // Only use backend data if we have products
               if (dataList.length > 0) {
                 const apiProducts: Product[] = dataList.map((p: any, idx: number) => ({
                   id: p.id?.toString() || `api-${idx}`,
@@ -147,10 +145,7 @@ function MedicationsPageContent() {
           console.warn('Failed to load products from API:', err)
         }
         
-        // If backend didn't provide products, load from localStorage
         if (!loadedFromBackend) {
-          console.log('Loading products from localStorage...')
-
           const setup = safeJsonParse<PharmacySetup>(getSiteItem('pharmacySetup'))
           if (setup?.products) {
             const userProducts: Product[] = setup.products
@@ -171,13 +166,38 @@ function MedicationsPageContent() {
                 imageUrl: (p as any).imageUrl || (p as any).image_url || '',
               }))
             setPharmacyProducts(userProducts)
-          } else {
-            console.log('No products found in localStorage either')
           }
         }
       }
       
-      fetchProducts()
+      void fetchProducts()
+
+      const reloadFromCache = () => {
+        const setup = safeJsonParse<PharmacySetup>(getSiteItem('pharmacySetup'))
+        if (!setup?.products?.length) return
+        setPharmacyProducts(
+          setup.products
+            .filter((p) => p.name?.trim())
+            .map((p, idx) => ({
+              id: p.id?.toString() || `user-${idx}`,
+              name: p.name,
+              category: p.category || 'General',
+              description: p.description,
+              price: p.price || '$0.00',
+              stock: typeof (p as any).stock === 'number' ? Math.floor((p as any).stock) : undefined,
+              inStock: typeof (p as any).stock === 'number' ? (p as any).stock > 0 : p.inStock !== false,
+              imageUrl: (p as any).imageUrl || (p as any).image_url || '',
+            })),
+        )
+      }
+
+      const onSync = () => {
+        void fetchProducts()
+        reloadFromCache()
+      }
+
+      window.addEventListener('pharmacy-products-synced', onSync)
+      return () => window.removeEventListener('pharmacy-products-synced', onSync)
     }
   }, [isDemo])
 

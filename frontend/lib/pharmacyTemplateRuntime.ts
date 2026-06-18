@@ -11,6 +11,7 @@ import {
 } from '@/lib/storage'
 import { normalizeRenderableProductImageUrl } from '@/lib/productImage'
 import { placePharmacyOrder, type PharmacyOrder } from '@/lib/pharmacyOrders'
+import { PHARMACY_PRODUCTS_SYNC_EVENT } from '@/lib/pharmacySheetSync'
 
 export type TemplateDemoState = {
   isDemo: boolean
@@ -249,7 +250,7 @@ export async function loadTemplateProducts(
     const token = localStorage.getItem('access_token')
     if (token) {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
-      const response = await fetch(`${apiUrl}/pharmacy/products/`, {
+      const response = await fetch(`${apiUrl}/pharmacy/products/?sync=1`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -278,6 +279,23 @@ export async function loadTemplateProducts(
     .map((item, index) => mapLocalProduct(item, index))
 
   return localProducts
+}
+
+export function subscribePharmacyProductSync(onSync: () => void) {
+  if (typeof window === 'undefined') return () => undefined
+
+  const handler = () => onSync()
+  window.addEventListener(PHARMACY_PRODUCTS_SYNC_EVENT, handler)
+  return () => window.removeEventListener(PHARMACY_PRODUCTS_SYNC_EVENT, handler)
+}
+
+export function loadProductsFromSiteCache(demoProducts: TemplateProduct[]): TemplateProduct[] {
+  const setup = safeJsonParse<PharmacySetupLike>(getSiteItem('pharmacySetup'))
+  const localProducts = (setup?.products || [])
+    .filter((item) => (item.name || '').trim())
+    .map((item, index) => mapLocalProduct(item, index))
+
+  return localProducts.length > 0 ? localProducts : demoProducts
 }
 
 export function readCart(cartKey: string, isDemo: boolean): TemplateCartItem[] {

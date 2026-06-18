@@ -22,6 +22,11 @@ class Pharmacy(models.Model):
     theme_settings = models.JSONField(default=dict, blank=True)
     template_id = models.IntegerField(null=True, blank=True)
     is_published = models.BooleanField(default=False)
+    google_sheet_url = models.URLField(max_length=500, blank=True, default='')
+    google_sheet_sync_enabled = models.BooleanField(default=False)
+    google_sheet_last_synced_at = models.DateTimeField(null=True, blank=True)
+    google_sheet_last_pushed_at = models.DateTimeField(null=True, blank=True)
+    google_sheet_webhook_url = models.URLField(max_length=500, blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

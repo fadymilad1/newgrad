@@ -23,6 +23,9 @@ export type PharmacyProfile = {
   theme_settings: PharmacyThemeSettings
   template_id: number | null
   is_published: boolean
+  google_sheet_url?: string
+  google_sheet_sync_enabled?: boolean
+  google_sheet_last_synced_at?: string | null
   product_count: number
   created_at: string
   updated_at: string
@@ -108,7 +111,34 @@ export type BulkUploadResult = {
   failed_count?: number
   processed_count?: number
   failed_rows: BulkUploadFailure[]
+  preview_count?: number
 }
+
+export type SheetUploadPreviewResult = {
+  message: string
+  preview_count: number
+  failed_count: number
+  failed_rows: BulkUploadFailure[]
+  preview_rows: Array<{
+    name: string
+    category: string
+    price: string
+    stock: number
+  }>
+}
+
+export type SheetSyncStatus = {
+  google_sheet_url: string
+  google_sheet_webhook_url?: string
+  google_sheet_sync_enabled: boolean
+  google_sheet_last_synced_at: string | null
+  google_sheet_last_pushed_at?: string | null
+  google_sheets_write_configured?: boolean
+  google_service_account_email?: string | null
+  sync_interval_seconds: number
+}
+
+export const SHEET_SYNC_INTERVAL_MS = 15_000
 
 type RequestResult<T> = {
   data?: T
@@ -248,11 +278,12 @@ export const pharmacyApi = {
 }
 
 export const pharmacyProductsApi = {
-  list: async (params?: { search?: string; category?: string; ordering?: string }) => {
+  list: async (params?: { search?: string; category?: string; ordering?: string; sync?: boolean }) => {
     const searchParams = new URLSearchParams()
     if (params?.search) searchParams.set('search', params.search)
     if (params?.category) searchParams.set('category', params.category)
     if (params?.ordering) searchParams.set('ordering', params.ordering)
+    if (params?.sync) searchParams.set('sync', '1')
 
     const suffix = searchParams.toString() ? `?${searchParams.toString()}` : ''
     const response = await request<PharmacyProduct[] | PaginatedResponse<PharmacyProduct>>(
@@ -306,5 +337,50 @@ export const pharmacyProductsApi = {
       method: 'POST',
       body: formData,
     })
+  },
+
+  bulkUploadFromSheet: async (url: string, dryRun = false, enableLiveSync = true) => {
+    return request<BulkUploadResult | SheetUploadPreviewResult>(
+      '/pharmacy/products/bulk_upload_from_sheet/',
+      {
+        method: 'POST',
+        body: toJsonBody({ url, dry_run: dryRun, enable_live_sync: enableLiveSync }),
+      },
+    )
+  },
+
+  getSheetSyncStatus: async () =>
+    request<SheetSyncStatus>('/pharmacy/products/sheet_sync_status/', { method: 'GET' }),
+
+  connectGoogleSheet: async (url: string, webhookUrl?: string) =>
+    request<SheetSyncStatus & { message: string; sync?: Record<string, unknown> }>(
+      '/pharmacy/products/connect_google_sheet/',
+      {
+        method: 'POST',
+        body: toJsonBody({ url, webhook_url: webhookUrl || '' }),
+      },
+    ),
+
+  disconnectGoogleSheet: async () =>
+    request<{ message: string; google_sheet_sync_enabled: boolean }>(
+      '/pharmacy/products/disconnect_google_sheet/',
+      { method: 'POST', body: toJsonBody({}) },
+    ),
+
+  listPublic: async (ownerId: string, sync = true) => {
+    const searchParams = new URLSearchParams({ owner_id: ownerId })
+    if (sync) searchParams.set('sync', '1')
+    const response = await request<{
+      products: PharmacyProduct[]
+      google_sheet_sync_enabled: boolean
+      google_sheet_last_synced_at: string | null
+      sync_interval_seconds: number
+    }>(`/pharmacy/products/public/?${searchParams.toString()}`, { method: 'GET' })
+
+    if (response.error) {
+      return { error: response.error }
+    }
+
+    return { data: response.data }
   },
 }

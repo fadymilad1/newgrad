@@ -10,6 +10,7 @@ import {
   FiSearch,
   FiTrash2,
   FiUploadCloud,
+  FiLink,
   FiX,
 } from 'react-icons/fi'
 
@@ -24,9 +25,18 @@ import {
   type BulkUploadFailure,
   type PharmacyProduct,
   type PharmacyProductPayload,
+  SHEET_SYNC_INTERVAL_MS,
 } from '@/lib/pharmacy'
-import { parsePharmacyCsv, type ParsedCsvRow } from '@/lib/pharmacyCsv'
+import { persistProductSnapshot, startPharmacyProductPolling } from '@/lib/pharmacySheetSync'
 import { setPublicSiteItem, setScopedItem } from '@/lib/storage'
+
+type SheetPreviewRow = {
+  name: string
+  price: number
+  category: string
+  description: string
+  stock?: number
+}
 
 type ProductForm = {
   id?: string
@@ -83,7 +93,6 @@ export default function PharmacyProductsPage() {
 
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
-  const [isUploadingCsv, setIsUploadingCsv] = useState(false)
   const [products, setProducts] = useState<PharmacyProduct[]>([])
   const [search, setSearch] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
@@ -91,37 +100,44 @@ export default function PharmacyProductsPage() {
   const [form, setForm] = useState<ProductForm>(emptyForm)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
 
-  const [csvFile, setCsvFile] = useState<File | null>(null)
-  const [csvPreviewRows, setCsvPreviewRows] = useState<ParsedCsvRow[]>([])
-  const [csvFailures, setCsvFailures] = useState<BulkUploadFailure[]>([])
+  const [sheetPreviewRows, setSheetPreviewRows] = useState<SheetPreviewRow[]>([])
+  const [sheetFailures, setSheetFailures] = useState<BulkUploadFailure[]>([])
+  const [sheetUrl, setSheetUrl] = useState('')
+  const [sheetWebhookUrl, setSheetWebhookUrl] = useState('')
+  const [isSheetLoading, setIsSheetLoading] = useState(false)
+  const [sheetPreviewCount, setSheetPreviewCount] = useState(0)
+  const [sheetSyncEnabled, setSheetSyncEnabled] = useState(false)
+  const [sheetLastSyncedAt, setSheetLastSyncedAt] = useState<string | null>(null)
+  const [sheetLastPushedAt, setSheetLastPushedAt] = useState<string | null>(null)
+  const [sheetWriteConfigured, setSheetWriteConfigured] = useState(false)
+  const [serviceAccountEmail, setServiceAccountEmail] = useState<string | null>(null)
 
-  const refreshProducts = async () => {
-    const res = await pharmacyProductsApi.list()
+  const refreshProducts = async (syncFromSheet = false) => {
+    const res = await pharmacyProductsApi.list({ sync: syncFromSheet })
     if (res.error) {
       showToast({ type: 'error', title: 'Could not load products', message: res.error })
       return
     }
     const nextProducts = Array.isArray(res.data) ? res.data : []
     setProducts(nextProducts)
+    persistProductSnapshot(nextProducts)
+  }
 
-    const snapshot = {
-      products: nextProducts.map((product) => ({
-        id: product.id,
-        name: product.name,
-        category: product.category,
-        description: product.description,
-        price: product.price,
-        stock: product.stock,
-        inStock: product.in_stock,
-        imageUrl: product.image_url_resolved || product.image_url || '',
-      })),
+  const loadSheetSyncStatus = async () => {
+    const response = await pharmacyProductsApi.getSheetSyncStatus()
+    if (response.error || !response.data) return
+
+    setSheetSyncEnabled(Boolean(response.data.google_sheet_sync_enabled))
+    setSheetLastSyncedAt(response.data.google_sheet_last_synced_at)
+    setSheetLastPushedAt(response.data.google_sheet_last_pushed_at || null)
+    setSheetWriteConfigured(Boolean(response.data.google_sheets_write_configured))
+    setServiceAccountEmail(response.data.google_service_account_email || null)
+    if (response.data.google_sheet_url) {
+      setSheetUrl(response.data.google_sheet_url)
     }
-
-    setScopedItem(
-      'pharmacySetup',
-      JSON.stringify(snapshot),
-    )
-    setPublicSiteItem('pharmacySetup', JSON.stringify(snapshot))
+    if (response.data.google_sheet_webhook_url) {
+      setSheetWebhookUrl(response.data.google_sheet_webhook_url)
+    }
   }
 
   useEffect(() => {
@@ -144,12 +160,27 @@ export default function PharmacyProductsPage() {
 
     const load = async () => {
       setIsLoading(true)
-      await refreshProducts()
+      await loadSheetSyncStatus()
+      await refreshProducts(true)
       setIsLoading(false)
     }
 
     void load()
   }, [router])
+
+  useEffect(() => {
+    if (!sheetSyncEnabled) return
+
+    return startPharmacyProductPolling({
+      enabled: true,
+      authenticated: true,
+      onProducts: (nextProducts) => {
+        setProducts(nextProducts)
+        void loadSheetSyncStatus()
+      },
+      intervalMs: SHEET_SYNC_INTERVAL_MS,
+    })
+  }, [sheetSyncEnabled])
 
   const categories = useMemo(() => {
     const safeProducts = Array.isArray(products) ? products : []
@@ -234,7 +265,7 @@ export default function PharmacyProductsPage() {
         throw new Error(response.error)
       }
 
-      await refreshProducts()
+      await refreshProducts(true)
       resetForm()
       showToast({
         type: 'success',
@@ -274,66 +305,124 @@ export default function PharmacyProductsPage() {
       return
     }
 
-    await refreshProducts()
+    await refreshProducts(true)
     showToast({ type: 'success', title: 'Product deleted', message: `${product.name} was removed.` })
   }
 
-  const handleCsvSelection = async (file: File | null) => {
-    setCsvFile(file)
-    setCsvPreviewRows([])
-    setCsvFailures([])
-
-    if (!file) return
-
-    const result = await parsePharmacyCsv(file)
-    setCsvPreviewRows(result.validRows)
-    setCsvFailures(
-      result.invalidRows.map((row) => ({
-        row: row.row,
-        errors: row.errors,
-        data: row.values,
-      })),
-    )
-
-    if (result.validRows.length === 0) {
-      showToast({
-        type: 'error',
-        title: 'CSV validation failed',
-        message: result.invalidRows[0]?.errors.join(', ') || 'No valid rows found.',
-      })
+  const handleLoadSheetPreview = async () => {
+    const trimmedUrl = sheetUrl.trim()
+    if (!trimmedUrl) {
+      showToast({ type: 'error', title: 'Sheet URL required', message: 'Paste your Google Sheet or Drive share link.' })
       return
     }
 
-    showToast({
-      type: 'info',
-      title: 'CSV preview ready',
-      message: `${result.validRows.length} valid rows detected before upload.`,
-    })
-  }
-
-  const handleUploadCsv = async () => {
-    if (!csvFile) return
-    setIsUploadingCsv(true)
+    setIsSheetLoading(true)
+    setSheetPreviewRows([])
+    setSheetFailures([])
+    setSheetPreviewCount(0)
 
     try {
-      const response = await pharmacyProductsApi.bulkUploadCsv(csvFile)
+      const response = await pharmacyProductsApi.bulkUploadFromSheet(trimmedUrl, true)
       if (response.error || !response.data) {
-        throw new Error(response.error || 'Upload failed.')
+        throw new Error(response.error || 'Could not load the Google Sheet.')
       }
 
-      setCsvFailures(response.data.failed_rows || [])
-      await refreshProducts()
+      const preview = response.data as {
+        preview_count?: number
+        failed_rows?: BulkUploadFailure[]
+        preview_rows?: Array<{ name: string; category: string; price: string; stock: number }>
+      }
+
+      const previewRows = (preview.preview_rows || []).map((row) => ({
+        name: row.name,
+        category: row.category,
+        price: Number(row.price),
+        description: '',
+        stock: row.stock,
+      }))
+
+      setSheetPreviewRows(previewRows)
+      setSheetFailures(preview.failed_rows || [])
+      setSheetPreviewCount(preview.preview_count || previewRows.length)
+
+      if ((preview.preview_count || 0) === 0) {
+        showToast({
+          type: 'error',
+          title: 'No valid rows found',
+          message: preview.failed_rows?.[0]?.errors.join(', ') || 'Check your sheet columns and values.',
+        })
+        return
+      }
 
       showToast({
-        type: response.data.failed_rows.length > 0 ? 'info' : 'success',
-        title: 'CSV upload completed',
-        message: `${response.data.processed_count || response.data.success_count} rows processed (${response.data.created_count} created, ${response.data.updated_count} updated, ${response.data.failed_count || response.data.failed_rows.length} failed).`,
+        type: 'info',
+        title: 'Google Sheet preview ready',
+        message: `${preview.preview_count} valid rows detected before import.`,
       })
     } catch (error) {
-      const errorText = error instanceof Error ? error.message : 'CSV upload failed.'
-      showToast({ type: 'error', title: 'Upload failed', message: errorText })
+      const errorText = error instanceof Error ? error.message : 'Could not load the Google Sheet.'
+      showToast({ type: 'error', title: 'Sheet load failed', message: errorText })
     } finally {
-      setIsUploadingCsv(false)
+      setIsSheetLoading(false)
+    }
+  }
+
+  const handleConnectLiveSync = async () => {
+    const trimmedUrl = sheetUrl.trim()
+    if (!trimmedUrl) return
+
+    setIsSheetLoading(true)
+
+    try {
+      const response = await pharmacyProductsApi.connectGoogleSheet(trimmedUrl, sheetWebhookUrl.trim())
+      if (response.error || !response.data) {
+        throw new Error(response.error || 'Could not connect live sync.')
+      }
+
+      setSheetSyncEnabled(true)
+      setSheetLastSyncedAt(response.data.google_sheet_last_synced_at || null)
+      setSheetLastPushedAt(response.data.google_sheet_last_pushed_at || null)
+      setSheetWriteConfigured(Boolean(response.data.google_sheets_write_configured))
+      await refreshProducts(true)
+
+      showToast({
+        type: 'success',
+        title: 'Live sync connected',
+        message: response.data.google_sheets_write_configured
+          ? 'Two-way sync is on. Sheet and Medify will stay in sync every ~15 seconds.'
+          : 'Sheet → Medify sync is on. Configure the Google service account on the backend to push Medify edits back to the sheet.',
+      })
+    } catch (error) {
+      const errorText = error instanceof Error ? error.message : 'Could not connect live sync.'
+      showToast({ type: 'error', title: 'Connect failed', message: errorText })
+    } finally {
+      setIsSheetLoading(false)
+    }
+  }
+
+  const handleDisconnectSheet = async () => {
+    const confirmed = window.confirm('Disconnect live Google Sheet sync? Products already synced will remain in Medify.')
+    if (!confirmed) return
+
+    setIsSheetLoading(true)
+    try {
+      const response = await pharmacyProductsApi.disconnectGoogleSheet()
+      if (response.error) {
+        throw new Error(response.error)
+      }
+
+      setSheetSyncEnabled(false)
+      setSheetLastSyncedAt(null)
+      showToast({
+        type: 'success',
+        title: 'Live sync disconnected',
+        message: 'Google Sheet is no longer syncing automatically.',
+      })
+    } catch (error) {
+      const errorText = error instanceof Error ? error.message : 'Could not disconnect live sync.'
+      showToast({ type: 'error', title: 'Disconnect failed', message: errorText })
+    } finally {
+      setIsSheetLoading(false)
     }
   }
 
@@ -359,7 +448,7 @@ export default function PharmacyProductsPage() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold text-neutral-dark">Product Management</h1>
-            <p className="text-neutral-gray mt-1">Upload via CSV, add manually, and manage your product catalog.</p>
+            <p className="text-neutral-gray mt-1">Sync from Google Sheet, add products manually, and manage your catalog.</p>
           </div>
           <div className="rounded-2xl border border-primary/20 bg-white/80 px-4 py-3 text-right">
             <p className="text-xs font-semibold uppercase tracking-wide text-neutral-gray">Visible Results</p>
@@ -387,39 +476,108 @@ export default function PharmacyProductsPage() {
       </section>
 
       <Card className="p-6">
-        <h2 className="text-xl font-semibold text-neutral-dark">CSV Upload</h2>
+        <h2 className="text-xl font-semibold text-neutral-dark">Google Sheet Sync</h2>
         <p className="mt-1 text-sm text-neutral-gray">
-          Required columns: Product Name, Category, Price, Stock Quantity, Description. Optional image column: Image, image_url, or Image Link (invalid URLs are ignored).
+          Required columns: Product Name, Category, Price, Stock Quantity, Description. Optional: Image, image_url, or Image Link.
         </p>
-        <div className="mt-2 text-sm">
-          <a
-            href="/sample-pharmacy-products.csv"
-            download
-            className="font-medium text-primary underline underline-offset-2"
-          >
-            Download CSV template
-          </a>
-        </div>
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-          <input
-            type="file"
-            accept=".csv"
-            onChange={(event) => handleCsvSelection(event.target.files?.[0] || null)}
-            className="input-field"
-            aria-label="Upload CSV file"
-            title="Upload CSV file"
-          />
-          <Button onClick={handleUploadCsv} disabled={!csvFile || isUploadingCsv}>
-            <FiUploadCloud className="mr-2" />
-            {isUploadingCsv ? 'Uploading...' : 'Upload CSV'}
-          </Button>
-          <Button type="button" variant="secondary" onClick={handleDeleteAll}>
-            <FiTrash2 className="mr-2" />
-            Delete All
-          </Button>
+
+        <div className="mt-6 rounded-2xl border border-neutral-border bg-neutral-light/40 p-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-neutral-dark">Live Google Sheet Sync (two-way)</h3>
+              <p className="mt-1 text-sm text-neutral-gray">
+                Share your sheet as &quot;Anyone with the link can edit&quot; (or view). Sheet edits flow into Medify every ~15 seconds.
+                To push Medify edits back to the sheet, add the optional Apps Script webhook below — no Google Cloud setup required.
+              </p>
+            </div>
+            {sheetSyncEnabled ? (
+              <span className="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                {sheetWriteConfigured ? 'Two-way sync active' : 'Sheet → Medify active'}
+              </span>
+            ) : null}
+          </div>
+          {!sheetSyncEnabled ? (
+            <div className="mt-3 space-y-3">
+              <Input
+                label="Apps Script webhook URL (optional — for Medify → Sheet)"
+                value={sheetWebhookUrl}
+                onChange={(event) => setSheetWebhookUrl(event.target.value)}
+                placeholder="https://script.google.com/macros/s/.../exec"
+              />
+              <p className="text-xs text-neutral-gray">
+                One-time setup: open your sheet → Extensions → Apps Script → paste the code from{' '}
+                <a href="/medify-sheet-sync.gs.txt" download className="font-medium text-primary underline underline-offset-2">
+                  medify-sheet-sync.gs.txt
+                </a>
+                {' '}→ Deploy → Web app → Execute as Me → Anyone can access → copy the deployment URL here.
+              </p>
+            </div>
+          ) : null}
+          {sheetSyncEnabled && !sheetWriteConfigured ? (
+            <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              Your sheet is set to anyone can edit, so Sheet → Medify works. To also push Medify edits back,
+              disconnect and reconnect with an Apps Script webhook URL, or configure a Google service account on the backend.
+            </p>
+          ) : null}
+          {sheetSyncEnabled && sheetWriteConfigured && serviceAccountEmail && !sheetWebhookUrl ? (
+            <p className="mt-2 text-xs text-neutral-gray">
+              Share your sheet with <span className="font-mono text-neutral-dark">{serviceAccountEmail}</span> as Editor so Medify can write changes back.
+            </p>
+          ) : null}
+          {sheetSyncEnabled && sheetWriteConfigured && sheetWebhookUrl ? (
+            <p className="mt-2 text-xs text-neutral-gray">
+              Medify → Sheet writes use your Apps Script webhook.
+            </p>
+          ) : null}
+          {sheetSyncEnabled && sheetLastSyncedAt ? (
+            <p className="mt-2 text-xs text-neutral-gray">
+              Last pulled from sheet: {new Date(sheetLastSyncedAt).toLocaleString()}
+            </p>
+          ) : null}
+          {sheetSyncEnabled && sheetLastPushedAt ? (
+            <p className="mt-1 text-xs text-neutral-gray">
+              Last pushed to sheet: {new Date(sheetLastPushedAt).toLocaleString()}
+            </p>
+          ) : null}
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <Input
+              value={sheetUrl}
+              onChange={(event) => {
+                setSheetUrl(event.target.value)
+                setSheetPreviewRows([])
+                setSheetFailures([])
+                setSheetPreviewCount(0)
+              }}
+              placeholder="https://docs.google.com/spreadsheets/d/..."
+              aria-label="Google Sheet URL"
+              disabled={sheetSyncEnabled}
+            />
+            <Button type="button" variant="secondary" onClick={handleLoadSheetPreview} disabled={!sheetUrl.trim() || isSheetLoading || sheetSyncEnabled}>
+              <FiLink className="mr-2" />
+              {isSheetLoading ? 'Loading...' : 'Load Preview'}
+            </Button>
+            {sheetSyncEnabled ? (
+              <Button type="button" variant="secondary" onClick={handleDisconnectSheet} disabled={isSheetLoading}>
+                Disconnect
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                onClick={handleConnectLiveSync}
+                disabled={!sheetUrl.trim() || sheetPreviewCount === 0 || isSheetLoading}
+              >
+                <FiUploadCloud className="mr-2" />
+                {isSheetLoading ? 'Connecting...' : 'Connect Live Sync'}
+              </Button>
+            )}
+            <Button type="button" variant="secondary" onClick={handleDeleteAll}>
+              <FiTrash2 className="mr-2" />
+              Delete All
+            </Button>
+          </div>
         </div>
 
-        {csvPreviewRows.length > 0 ? (
+        {sheetPreviewRows.length > 0 ? (
           <div className="mt-4 overflow-x-auto rounded-lg border border-neutral-border">
             <table className="min-w-full text-sm">
               <thead className="bg-neutral-light text-left text-neutral-gray">
@@ -431,7 +589,7 @@ export default function PharmacyProductsPage() {
                 </tr>
               </thead>
               <tbody>
-                {csvPreviewRows.slice(0, 6).map((row, index) => (
+                {sheetPreviewRows.slice(0, 6).map((row, index) => (
                   <tr key={`${row.name}-${index}`} className="border-t border-neutral-border">
                     <td className="px-3 py-2">{row.name}</td>
                     <td className="px-3 py-2">{row.category}</td>
@@ -441,17 +599,19 @@ export default function PharmacyProductsPage() {
                 ))}
               </tbody>
             </table>
-            {csvPreviewRows.length > 6 ? (
-              <p className="px-3 py-2 text-xs text-neutral-gray">Showing first 6 rows of {csvPreviewRows.length} valid rows.</p>
+            {sheetPreviewRows.length > 6 ? (
+              <p className="px-3 py-2 text-xs text-neutral-gray">
+                Showing first 6 rows of {sheetPreviewCount || sheetPreviewRows.length} valid rows.
+              </p>
             ) : null}
           </div>
         ) : null}
 
-        {csvFailures.length > 0 ? (
+        {sheetFailures.length > 0 ? (
           <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            <div className="font-semibold">Rows with issues ({csvFailures.length})</div>
+            <div className="font-semibold">Rows with issues ({sheetFailures.length})</div>
             <p className="mt-1 text-xs text-amber-800">
-              Invalid rows were skipped. Fix the listed values and re-upload to import all products.
+              Invalid rows were skipped. Fix the listed values in your Google Sheet and sync again.
             </p>
             <div className="mt-3 overflow-x-auto rounded-md border border-amber-200 bg-white/70">
               <table className="min-w-full text-xs sm:text-sm">
@@ -466,10 +626,10 @@ export default function PharmacyProductsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {csvFailures.slice(0, 10).map((failure) => {
+                  {sheetFailures.slice(0, 10).map((failure) => {
                     const rowData = failure.data || {}
                     return (
-                      <tr key={`csv-failure-${failure.row}`} className="border-t border-amber-100 align-top">
+                      <tr key={`sheet-failure-${failure.row}`} className="border-t border-amber-100 align-top">
                         <td className="px-3 py-2 font-semibold">{failure.row}</td>
                         <td className="px-3 py-2 whitespace-normal">{failure.errors.join(', ')}</td>
                         <td className="px-3 py-2">
@@ -488,8 +648,8 @@ export default function PharmacyProductsPage() {
                 </tbody>
               </table>
             </div>
-            {csvFailures.length > 10 ? (
-              <div className="mt-2 text-xs">Showing first 10 failed rows of {csvFailures.length}.</div>
+            {sheetFailures.length > 10 ? (
+              <div className="mt-2 text-xs">Showing first 10 failed rows of {sheetFailures.length}.</div>
             ) : null}
           </div>
         ) : null}
@@ -642,7 +802,7 @@ export default function PharmacyProductsPage() {
         ) : filteredProducts.length === 0 ? (
           <div className="mt-6 rounded-xl border border-dashed border-neutral-border p-10 text-center">
             <h3 className="text-lg font-semibold text-neutral-dark">No products yet</h3>
-            <p className="mt-1 text-sm text-neutral-gray">Upload a CSV file or add products manually to build your catalog.</p>
+            <p className="mt-1 text-sm text-neutral-gray">Connect your Google Sheet or add products manually to build your catalog.</p>
           </div>
         ) : viewMode === 'table' ? (
           <div className="mt-4 overflow-x-auto rounded-lg border border-neutral-border">

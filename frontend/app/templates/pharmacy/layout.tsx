@@ -3,14 +3,15 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 
-import { pharmacyApi } from '@/lib/pharmacy'
+import { pharmacyApi, pharmacyProductsApi } from '@/lib/pharmacy'
+import { startPharmacyProductPolling } from '@/lib/pharmacySheetSync'
 import {
   getPharmacyThemeCssVariables,
   getStoredPharmacyThemeSettings,
   normalizePharmacyThemeSettings,
   persistPharmacyThemeSettings,
 } from '@/lib/pharmacyTheme'
-import { getSiteItem, getStoredUser, setPublicSiteItem, setSiteItem, setSiteOwnerId } from '@/lib/storage'
+import { getSiteItem, getSiteOwnerId, getStoredUser, setPublicSiteItem, setSiteItem, setSiteOwnerId } from '@/lib/storage'
 
 type BusinessInfoSnapshot = {
   name?: string
@@ -111,6 +112,44 @@ function PharmacyTemplatesLayoutContent({ children }: { children: React.ReactNod
 
     return () => {
       window.removeEventListener('storage', syncThemeFromStorage)
+    }
+  }, [isDemo, ownerId])
+
+  useEffect(() => {
+    if (isDemo) return
+
+    let stopPolling: (() => void) | undefined
+    let active = true
+
+    const startLivePolling = async () => {
+      const currentUser = getStoredUser()
+      const resolvedOwnerId = ownerId || currentUser?.id || getSiteOwnerId()
+      const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
+
+      let syncEnabled = false
+      if (token) {
+        const status = await pharmacyProductsApi.getSheetSyncStatus()
+        syncEnabled = Boolean(status.data?.google_sheet_sync_enabled)
+      } else if (resolvedOwnerId) {
+        const publicProducts = await pharmacyProductsApi.listPublic(resolvedOwnerId, false)
+        syncEnabled = Boolean(publicProducts.data?.google_sheet_sync_enabled)
+      }
+
+      if (!active || !syncEnabled) return
+
+      stopPolling = startPharmacyProductPolling({
+        enabled: true,
+        authenticated: Boolean(token),
+        ownerId: token ? null : resolvedOwnerId,
+        onProducts: () => undefined,
+      })
+    }
+
+    void startLivePolling()
+
+    return () => {
+      active = false
+      stopPolling?.()
     }
   }, [isDemo, ownerId])
 

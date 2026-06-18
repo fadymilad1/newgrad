@@ -251,3 +251,7 @@ HUGGINGFACE_API_URL = config(
 )
 CHATBOT_HTTP_TIMEOUT = config('CHATBOT_HTTP_TIMEOUT', default=60, cast=int)
 CHATBOT_STREAM_CHUNK_SIZE = config('CHATBOT_STREAM_CHUNK_SIZE', default=28, cast=int)
+
+# Google Sheets API (bidirectional product sync — share each sheet with the service account email as Editor)
+GOOGLE_SERVICE_ACCOUNT_FILE = config('GOOGLE_SERVICE_ACCOUNT_FILE', default='')
+GOOGLE_SERVICE_ACCOUNT_JSON = config('GOOGLE_SERVICE_ACCOUNT_JSON', default='')

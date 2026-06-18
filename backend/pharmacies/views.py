@@ -21,6 +21,17 @@ from rest_framework.response import Response
 
 from core.models import WebsiteSetup
 from pharmacies.models import Pharmacy, PharmacyOrder, PharmacyOrderItem, PharmacyTemplatePurchase, Product
+from pharmacies.google_sheet import (
+    GoogleSheetAccessError,
+    GoogleSheetWriteError,
+    fetch_google_sheet_csv,
+    google_sheets_write_configured,
+    push_products_to_google_sheet,
+    get_service_account_email,
+    pharmacy_sheet_push_available,
+    push_products_to_connected_sheet,
+)
+from pharmacies.sheet_sync import SHEET_SYNC_INTERVAL_SECONDS
 from pharmacies.serializers import (
     CancelTemplatePurchaseSerializer,
     PharmacyCreateUpdateSerializer,
@@ -30,7 +41,9 @@ from pharmacies.serializers import (
     PharmacySerializer,
     PharmacyTemplatePurchaseSerializer,
     PurchaseTemplateSerializer,
+    ProductBulkUploadFromSheetSerializer,
     ProductBulkUploadSerializer,
+    ProductConnectGoogleSheetSerializer,
     ProductCreateUpdateSerializer,
     ProductSerializer,
 )
@@ -499,12 +512,25 @@ class ProductViewSet(viewsets.ModelViewSet):
             payload['image_url'] = ''
 
         serializer.save(**payload)
+        self._maybe_push_to_google_sheet(pharmacy)
 
     def perform_update(self, serializer):
         if self.request.FILES.get('image'):
             serializer.save(image_url='')
-            return
-        serializer.save()
+        else:
+            serializer.save()
+
+        pharmacy = serializer.instance.pharmacy
+        if not pharmacy:
+            pharmacy, _ = self._get_or_create_pharmacy()
+        self._maybe_push_to_google_sheet(pharmacy)
+
+    def perform_destroy(self, instance):
+        pharmacy = instance.pharmacy
+        if not pharmacy:
+            pharmacy, _ = self._get_or_create_pharmacy()
+        instance.delete()
+        self._maybe_push_to_google_sheet(pharmacy)
 
     @action(detail=False, methods=['get'])
     def stats(self, request):
@@ -588,15 +614,7 @@ class ProductViewSet(viewsets.ModelViewSet):
             '__raw_data': original_data,
         }, None
 
-    def _parse_csv_upload(self, uploaded_file):
-        uploaded_file.seek(0)
-        raw_file_content = uploaded_file.read()
-        decoded_content = (
-            raw_file_content.decode('utf-8-sig', errors='replace')
-            if isinstance(raw_file_content, bytes)
-            else str(raw_file_content)
-        )
-
+    def _parse_csv_content(self, decoded_content):
         if not decoded_content.strip():
             return [], [
                 {
@@ -646,6 +664,16 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         return valid_rows, failed_rows
 
+    def _parse_csv_upload(self, uploaded_file):
+        uploaded_file.seek(0)
+        raw_file_content = uploaded_file.read()
+        decoded_content = (
+            raw_file_content.decode('utf-8-sig', errors='replace')
+            if isinstance(raw_file_content, bytes)
+            else str(raw_file_content)
+        )
+        return self._parse_csv_content(decoded_content)
+
     def _parse_json_upload(self, payload_rows):
         valid_rows = []
         failed_rows = []
@@ -659,40 +687,38 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         return valid_rows, failed_rows
 
-    @action(detail=False, methods=['post'])
-    def bulk_upload(self, request):
-        """
-        Bulk upload products from CSV or JSON list.
+    def _product_row_key(self, name: str, category: str) -> tuple[str, str]:
+        return (name.strip().lower(), (category or 'General').strip().lower())
 
-        CSV accepts common aliases such as Product Name and Stock Quantity.
-        """
-        pharmacy, website_setup = self._get_or_create_pharmacy()
-
-        uploaded_file = request.FILES.get('file')
-        if uploaded_file:
-            products_data, failed_rows = self._parse_csv_upload(uploaded_file)
-        else:
-            serializer = ProductBulkUploadSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
-            products_data, failed_rows = self._parse_json_upload(serializer.validated_data['products'])
-
+    def _apply_product_rows(
+        self,
+        request,
+        pharmacy,
+        website_setup,
+        products_data,
+        failed_rows,
+        *,
+        remove_missing: bool = False,
+    ):
         if not products_data and failed_rows:
             failed_count = len(failed_rows)
-            return Response(
-                {
-                    'message': 'No valid rows found in upload.',
-                    'success_count': 0,
-                    'created_count': 0,
-                    'updated_count': 0,
-                    'failed_count': failed_count,
-                    'processed_count': failed_count,
-                    'failed_rows': failed_rows,
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return {
+                'ok': False,
+                'status_code': status.HTTP_400_BAD_REQUEST,
+                'message': 'No valid rows found in upload.',
+                'success_count': 0,
+                'created_count': 0,
+                'updated_count': 0,
+                'deleted_count': 0,
+                'failed_count': failed_count,
+                'processed_count': failed_count,
+                'failed_rows': failed_rows,
+                'preview_count': 0,
+            }
 
         created_count = 0
         updated_count = 0
+        synced_keys: set[tuple[str, str]] = set()
 
         for row_index, product_data in enumerate(products_data, start=1):
             row_number = product_data.get('__row_number', row_index)
@@ -704,6 +730,7 @@ class ProductViewSet(viewsets.ModelViewSet):
                 'price': product_data.get('price', Decimal('0')),
                 'stock': product_data.get('stock', 0),
             }
+            synced_keys.add(self._product_row_key(row_payload['name'], row_payload['category']))
 
             try:
                 with transaction.atomic():
@@ -747,6 +774,14 @@ class ProductViewSet(viewsets.ModelViewSet):
                 })
                 continue
 
+        deleted_count = 0
+        if remove_missing:
+            for product in Product.objects.filter(pharmacy=pharmacy, website_setup=website_setup):
+                product_key = self._product_row_key(product.name, product.category)
+                if product_key not in synced_keys:
+                    product.delete()
+                    deleted_count += 1
+
         if failed_rows:
             logger.warning(
                 "Bulk product upload finished with %s failed rows for user %s",
@@ -754,17 +789,293 @@ class ProductViewSet(viewsets.ModelViewSet):
                 request.user.id,
             )
 
-        status_code = status.HTTP_201_CREATED if not failed_rows else status.HTTP_200_OK
         failed_count = len(failed_rows)
-        return Response({
+        status_code = status.HTTP_201_CREATED if not failed_rows else status.HTTP_200_OK
+        return {
+            'ok': True,
+            'status_code': status_code,
             'message': f'{created_count} products created, {updated_count} products updated',
             'success_count': created_count + updated_count,
             'created_count': created_count,
             'updated_count': updated_count,
+            'deleted_count': deleted_count,
             'failed_count': failed_count,
             'processed_count': created_count + updated_count + failed_count,
             'failed_rows': failed_rows,
-        }, status=status_code)
+            'preview_count': len(products_data),
+        }
+
+    def _persist_bulk_upload(self, request, pharmacy, website_setup, products_data, failed_rows, *, remove_missing=False):
+        result = self._apply_product_rows(
+            request,
+            pharmacy,
+            website_setup,
+            products_data,
+            failed_rows,
+            remove_missing=remove_missing,
+        )
+        response_status = result.pop('status_code', status.HTTP_200_OK)
+        result.pop('ok', True)
+        return Response(result, status=response_status)
+
+    def _maybe_push_to_google_sheet(self, pharmacy):
+        if not pharmacy or not pharmacy.google_sheet_sync_enabled or not pharmacy.google_sheet_url:
+            return {'pushed': False, 'reason': 'not_connected'}
+
+        try:
+            products = Product.objects.filter(pharmacy=pharmacy).order_by('category', 'name', 'id')
+            push_products_to_connected_sheet(pharmacy, products)
+            pharmacy.google_sheet_last_pushed_at = timezone.now()
+            pharmacy.save(update_fields=['google_sheet_last_pushed_at', 'updated_at'])
+            return {'pushed': True, 'pushed_at': pharmacy.google_sheet_last_pushed_at}
+        except GoogleSheetWriteError as exc:
+            logger.warning('Google Sheet push failed for pharmacy %s: %s', pharmacy.id, exc)
+            return {'pushed': False, 'error': str(exc)}
+
+    def _should_sync_google_sheet(self, pharmacy, force: bool = False) -> bool:
+        if not pharmacy.google_sheet_sync_enabled or not pharmacy.google_sheet_url:
+            return False
+        if force:
+            return True
+        if pharmacy.google_sheet_last_pushed_at:
+            since_push = (timezone.now() - pharmacy.google_sheet_last_pushed_at).total_seconds()
+            if since_push < SHEET_SYNC_INTERVAL_SECONDS:
+                return False
+        if not pharmacy.google_sheet_last_synced_at:
+            return True
+        elapsed = (timezone.now() - pharmacy.google_sheet_last_synced_at).total_seconds()
+        return elapsed >= SHEET_SYNC_INTERVAL_SECONDS
+
+    def _sync_from_google_sheet(self, request, pharmacy, website_setup, *, force: bool = False):
+        if not self._should_sync_google_sheet(pharmacy, force=force):
+            return {'synced': False, 'reason': 'throttled'}
+
+        try:
+            csv_content = fetch_google_sheet_csv(pharmacy.google_sheet_url)
+        except GoogleSheetAccessError as exc:
+            return {'synced': False, 'error': str(exc)}
+
+        products_data, failed_rows = self._parse_csv_content(csv_content)
+        result = self._apply_product_rows(
+            request,
+            pharmacy,
+            website_setup,
+            products_data,
+            failed_rows,
+            remove_missing=True,
+        )
+
+        pharmacy.google_sheet_last_synced_at = timezone.now()
+        pharmacy.save(update_fields=['google_sheet_last_synced_at', 'updated_at'])
+
+        return {
+            'synced': True,
+            'created_count': result.get('created_count', 0),
+            'updated_count': result.get('updated_count', 0),
+            'deleted_count': result.get('deleted_count', 0),
+            'failed_count': result.get('failed_count', 0),
+            'failed_rows': result.get('failed_rows', []),
+            'synced_at': pharmacy.google_sheet_last_synced_at,
+        }
+
+    def list(self, request, *args, **kwargs):
+        pharmacy, website_setup = self._get_or_create_pharmacy()
+        force_sync = request.query_params.get('sync') in {'1', 'true', 'yes'}
+        if pharmacy.google_sheet_sync_enabled and pharmacy.google_sheet_url:
+            self._sync_from_google_sheet(request, pharmacy, website_setup, force=force_sync)
+        return super().list(request, *args, **kwargs)
+
+    @action(detail=False, methods=['post'])
+    def bulk_upload(self, request):
+        """
+        Bulk upload products from CSV or JSON list.
+
+        CSV accepts common aliases such as Product Name and Stock Quantity.
+        """
+        pharmacy, website_setup = self._get_or_create_pharmacy()
+
+        uploaded_file = request.FILES.get('file')
+        if uploaded_file:
+            products_data, failed_rows = self._parse_csv_upload(uploaded_file)
+        else:
+            serializer = ProductBulkUploadSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            products_data, failed_rows = self._parse_json_upload(serializer.validated_data['products'])
+
+        response = self._persist_bulk_upload(request, pharmacy, website_setup, products_data, failed_rows)
+        if pharmacy.google_sheet_sync_enabled:
+            self._maybe_push_to_google_sheet(pharmacy)
+        return response
+
+    @action(detail=False, methods=['post'], url_path='bulk_upload_from_sheet')
+    def bulk_upload_from_sheet(self, request):
+        """
+        Import products from a public Google Sheets / Google Drive share URL.
+
+        Set dry_run=true to validate and preview rows without saving.
+        """
+        serializer = ProductBulkUploadFromSheetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        sheet_url = serializer.validated_data['url']
+        dry_run = serializer.validated_data.get('dry_run', False)
+
+        try:
+            csv_content = fetch_google_sheet_csv(sheet_url)
+        except GoogleSheetAccessError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        products_data, failed_rows = self._parse_csv_content(csv_content)
+
+        if dry_run:
+            failed_count = len(failed_rows)
+            valid_count = len(products_data)
+            if valid_count == 0 and failed_count == 0:
+                return Response(
+                    {
+                        'message': 'No product rows found in the Google Sheet.',
+                        'preview_count': 0,
+                        'failed_count': 0,
+                        'failed_rows': [],
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            return Response(
+                {
+                    'message': f'{valid_count} valid rows ready to import.',
+                    'preview_count': valid_count,
+                    'failed_count': failed_count,
+                    'failed_rows': failed_rows,
+                    'preview_rows': [
+                        {
+                            'name': row.get('name', ''),
+                            'category': row.get('category', ''),
+                            'price': str(row.get('price', '')),
+                            'stock': row.get('stock', 0),
+                        }
+                        for row in products_data[:6]
+                    ],
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        pharmacy, website_setup = self._get_or_create_pharmacy()
+        enable_live_sync = serializer.validated_data.get('enable_live_sync', True)
+        if enable_live_sync:
+            pharmacy.google_sheet_url = sheet_url
+            pharmacy.google_sheet_sync_enabled = True
+            pharmacy.save(update_fields=['google_sheet_url', 'google_sheet_sync_enabled', 'updated_at'])
+
+        response = self._persist_bulk_upload(
+            request,
+            pharmacy,
+            website_setup,
+            products_data,
+            failed_rows,
+            remove_missing=enable_live_sync,
+        )
+        if enable_live_sync:
+            pharmacy.google_sheet_last_synced_at = timezone.now()
+            pharmacy.save(update_fields=['google_sheet_last_synced_at', 'updated_at'])
+        return response
+
+    @action(detail=False, methods=['get'], url_path='sheet_sync_status')
+    def sheet_sync_status(self, request):
+        pharmacy, _ = self._get_or_create_pharmacy()
+        return Response({
+            'google_sheet_url': pharmacy.google_sheet_url,
+            'google_sheet_webhook_url': pharmacy.google_sheet_webhook_url,
+            'google_sheet_sync_enabled': pharmacy.google_sheet_sync_enabled,
+            'google_sheet_last_synced_at': pharmacy.google_sheet_last_synced_at,
+            'google_sheet_last_pushed_at': pharmacy.google_sheet_last_pushed_at,
+            'google_sheets_write_configured': pharmacy_sheet_push_available(pharmacy),
+            'google_service_account_email': get_service_account_email(),
+            'sync_interval_seconds': SHEET_SYNC_INTERVAL_SECONDS,
+        })
+
+    @action(detail=False, methods=['post'], url_path='connect_google_sheet')
+    def connect_google_sheet(self, request):
+        serializer = ProductConnectGoogleSheetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        pharmacy, website_setup = self._get_or_create_pharmacy()
+        pharmacy.google_sheet_url = serializer.validated_data['url']
+        pharmacy.google_sheet_webhook_url = (serializer.validated_data.get('webhook_url') or '').strip()
+        pharmacy.google_sheet_sync_enabled = True
+        pharmacy.save(update_fields=[
+            'google_sheet_url',
+            'google_sheet_webhook_url',
+            'google_sheet_sync_enabled',
+            'updated_at',
+        ])
+
+        sync_result = self._sync_from_google_sheet(request, pharmacy, website_setup, force=True)
+        return Response({
+            'message': 'Google Sheet connected for live sync.',
+            'google_sheet_url': pharmacy.google_sheet_url,
+            'google_sheet_webhook_url': pharmacy.google_sheet_webhook_url,
+            'google_sheet_sync_enabled': pharmacy.google_sheet_sync_enabled,
+            'google_sheet_last_synced_at': pharmacy.google_sheet_last_synced_at,
+            'google_sheet_last_pushed_at': pharmacy.google_sheet_last_pushed_at,
+            'google_sheets_write_configured': pharmacy_sheet_push_available(pharmacy),
+            'google_service_account_email': get_service_account_email(),
+            'sync_interval_seconds': SHEET_SYNC_INTERVAL_SECONDS,
+            'sync': sync_result,
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], url_path='disconnect_google_sheet')
+    def disconnect_google_sheet(self, request):
+        pharmacy, _ = self._get_or_create_pharmacy()
+        pharmacy.google_sheet_url = ''
+        pharmacy.google_sheet_webhook_url = ''
+        pharmacy.google_sheet_sync_enabled = False
+        pharmacy.google_sheet_last_synced_at = None
+        pharmacy.google_sheet_last_pushed_at = None
+        pharmacy.save(update_fields=[
+            'google_sheet_url',
+            'google_sheet_webhook_url',
+            'google_sheet_sync_enabled',
+            'google_sheet_last_synced_at',
+            'google_sheet_last_pushed_at',
+            'updated_at',
+        ])
+        return Response({
+            'message': 'Google Sheet live sync disconnected.',
+            'google_sheet_sync_enabled': False,
+        })
+
+    @action(
+        detail=False,
+        methods=['get'],
+        url_path='public',
+        permission_classes=[permissions.AllowAny],
+        authentication_classes=[],
+    )
+    def public_list(self, request):
+        owner_id = request.query_params.get('owner_id')
+        if not owner_id:
+            return Response({'error': 'owner_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        pharmacy = Pharmacy.objects.select_related('website_setup', 'user').filter(user_id=owner_id).first()
+        if not pharmacy:
+            return Response({'error': 'Pharmacy not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        website_setup = pharmacy.website_setup
+        force_sync = request.query_params.get('sync') in {'1', 'true', 'yes'}
+        sync_result = None
+        if pharmacy.google_sheet_sync_enabled and pharmacy.google_sheet_url:
+            sync_result = self._sync_from_google_sheet(request, pharmacy, website_setup, force=force_sync)
+
+        products = Product.objects.filter(pharmacy=pharmacy).order_by('-updated_at')
+        serializer = ProductSerializer(products, many=True, context={'request': request})
+        return Response({
+            'products': serializer.data,
+            'google_sheet_sync_enabled': pharmacy.google_sheet_sync_enabled,
+            'google_sheet_last_synced_at': pharmacy.google_sheet_last_synced_at,
+            'sync_interval_seconds': SHEET_SYNC_INTERVAL_SECONDS,
+            'sync': sync_result,
+        })
 
     @action(detail=False, methods=['get'])
     def debug_info(self, request):
@@ -789,13 +1100,16 @@ class ProductViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['delete'])
     def delete_all(self, request):
         """Delete all products for current user"""
+        pharmacy, _ = self._get_or_create_pharmacy()
         owned_products = Product.objects.filter(
             Q(pharmacy__user=request.user) | Q(website_setup__user=request.user)
         )
         count = owned_products.count()
         owned_products.delete()
+        push_result = self._maybe_push_to_google_sheet(pharmacy)
         return Response({
-            'message': f'{count} products deleted successfully'
+            'message': f'{count} products deleted successfully',
+            'sheet_push': push_result,
         }, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'])
