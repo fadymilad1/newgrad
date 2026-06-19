@@ -46,7 +46,10 @@ export interface DoctorSchedule {
     start_time: string;
     end_time: string;
     slot_duration_minutes: number;
+<<<<<<< HEAD
     specific_date?: string | null; // YYYY-MM-DD format if set
+=======
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
 }
 
 export interface Doctor {
@@ -101,8 +104,11 @@ export interface HospitalProfile {
     theme_settings: Record<string, any>;
     is_published: boolean;
     timezone: string;
+<<<<<<< HEAD
     years_of_excellence: number;
     patients_treated: string;
+=======
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
     created_at: string;
     updated_at: string;
 }

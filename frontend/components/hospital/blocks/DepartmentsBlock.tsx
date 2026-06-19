@@ -255,7 +255,11 @@ export default async function DepartmentsBlock({
 
                     {/* Book Appointment Link */}
                     <Link
+<<<<<<< HEAD
                       href={`/booking?department_id=${dept.id}`}
+=======
+                      href={`/departments/${dept.slug ?? dept.id}`}
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
                       className="inline-flex items-center gap-1.5 text-sm font-semibold transition-opacity hover:opacity-75 group/link"
                       style={{ color: "var(--hospital-btn-primary)" }}
                     >

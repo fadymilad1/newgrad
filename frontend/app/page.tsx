@@ -295,7 +295,11 @@ export default function LandingPage() {
             </div>
             <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 text-sm">
               {[
+<<<<<<< HEAD
                 { title: 'Launch fast', value: 'Go live in Seconds' },
+=======
+                { title: 'Launch fast', value: 'Go live in days' },
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
                 { title: 'Secure checkout', value: 'Visa and Fawry ready' },
                 { title: 'AI Assistant', value: 'Support 24/7' },
               ].map((item) => (

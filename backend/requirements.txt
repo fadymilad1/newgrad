@@ -12,9 +12,15 @@ huggingface_hub>=0.36.0
 faiss-cpu==1.14.2
 sentence-transformers==3.0.1
 transformers==4.44.2
+<<<<<<< HEAD
 torch>=2.9.0
 requests==2.32.3
 numpy>=1.26.4
+=======
+torch==2.4.1
+requests==2.32.3
+numpy==1.26.4
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
 google-genai
 google-auth>=2.29.0
 google-api-python-client>=2.130.0

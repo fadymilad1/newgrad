@@ -590,6 +590,7 @@ export default function BusinessInfoPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input
                 label="Phone"
+<<<<<<< HEAD
                 type="tel"
                 placeholder="1234567890"
                 value={formData.contactPhone}
@@ -597,6 +598,11 @@ export default function BusinessInfoPage() {
                   const value = e.target.value.replace(/\D/g, '')
                   setFormData({ ...formData, contactPhone: value })
                 }}
+=======
+                placeholder="+1 (555) 123-4567"
+                value={formData.contactPhone}
+                onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
               />
               <Input
                 label="Email"

@@ -147,12 +147,18 @@ function CalendarPicker({
   selectedDate,
   onDateSelect,
   workDays,
+<<<<<<< HEAD
   availableDates,
+=======
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
 }: {
   selectedDate: string;
   onDateSelect: (date: string) => void;
   workDays: Set<number>;
+<<<<<<< HEAD
   availableDates?: Set<string>;
+=======
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
 }) {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
@@ -227,6 +233,7 @@ function CalendarPicker({
           const jsDay = new Date(year, month, day).getDay(); // 0=Sun,6=Sat
           // Convert JS Sunday=0 to Mon=0 system used by schedules
           const hospitalDay = (jsDay + 6) % 7;
+<<<<<<< HEAD
           
           // Check if date is available: either in specific dates or matches workDays
           let isWorkDay = false;
@@ -236,6 +243,9 @@ function CalendarPicker({
             isWorkDay = workDays.size === 0 || workDays.has(hospitalDay);
           }
           
+=======
+          const isWorkDay = workDays.size === 0 || workDays.has(hospitalDay);
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
           const isSelected = dateStr === selectedDate;
           const isToday = dateStr === todayStr;
           const isDisabled = isPast || !isWorkDay;
@@ -418,6 +428,7 @@ export default function BookingFormBlock({ settings, subdomain }: BookingFormBlo
 
   useEffect(() => { fetchSlots(); }, [fetchSlots]);
 
+<<<<<<< HEAD
   // Get available dates: if doctor has specific_date schedules, use those; otherwise use day_of_week
   const availableDates = new Set<string>();
   const workDays = new Set<number>();
@@ -439,6 +450,12 @@ export default function BookingFormBlock({ settings, subdomain }: BookingFormBlo
       });
     }
   }
+=======
+  // Get the work days this doctor works (0=Mon ... 6=Sun in hospital day system)
+  const workDays = new Set<number>(
+    (selectedDoctor?.schedules || []).map(s => s.day_of_week)
+  );
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
 
   // Submit
   const handleSubmit = async (e: React.FormEvent) => {
@@ -635,6 +652,7 @@ export default function BookingFormBlock({ settings, subdomain }: BookingFormBlo
                     Only dates when <strong style={{ color: 'var(--hospital-text)' }}>{selectedDoctor.name}</strong> is available are highlighted.
                   </p>
                 )}
+<<<<<<< HEAD
                 
                 {/* Warning when doctor has no available dates */}
                 {selectedDoctor && availableDates.size === 0 && workDays.size === 0 && (
@@ -653,11 +671,16 @@ export default function BookingFormBlock({ settings, subdomain }: BookingFormBlo
                   </div>
                 )}
                 
+=======
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
                 <CalendarPicker
                   selectedDate={selectedDate}
                   onDateSelect={setSelectedDate}
                   workDays={workDays}
+<<<<<<< HEAD
                   availableDates={availableDates}
+=======
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
                 />
                 <div className="mt-6 flex gap-3">
                   <button

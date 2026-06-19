@@ -10,6 +10,7 @@ def get_available_slots(doctor, target_date: date):
     # 0 = Monday, ..., 6 = Sunday
     day_of_week = target_date.weekday()
     
+<<<<<<< HEAD
     # Get schedules - prioritize specific_date if set, otherwise use day_of_week
     schedules = DoctorSchedule.objects.filter(
         doctor=doctor,
@@ -24,6 +25,14 @@ def get_available_slots(doctor, target_date: date):
             specific_date__isnull=True
         )
     
+=======
+    # Get all schedules for the doctor on this day of the week
+    schedules = DoctorSchedule.objects.filter(
+        doctor=doctor,
+        day_of_week=day_of_week
+    )
+    
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
     if not schedules.exists():
         return []
 

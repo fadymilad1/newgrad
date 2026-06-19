@@ -39,7 +39,11 @@ export default async function HospitalLayout({ children, params }: LayoutProps) 
     
     const chatbotName = theme.chatbotName || `${profile?.name || 'Hospital'} Medical AI`;
     const chatbotColor = theme.chatbotColor || primaryColor;
+<<<<<<< HEAD
     const emergencyNumber = theme.emergencyNumber || '911';
+=======
+    const emergencyNumber = theme.emergencyNumber || 'local emergency services';
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
     const logoUrl = profile?.logo ? normalizeLogoUrl(profile.logo) : null;
 
     // Load Google Font

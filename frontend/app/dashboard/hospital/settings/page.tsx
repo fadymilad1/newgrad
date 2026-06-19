@@ -26,8 +26,11 @@ export default function HospitalSettingsPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [timezone, setTimezone] = useState('UTC');
+<<<<<<< HEAD
   const [yearsOfExcellence, setYearsOfExcellence] = useState('25');
   const [patientsTreated, setPatientsTreated] = useState('50k+');
+=======
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
 
@@ -47,8 +50,11 @@ export default function HospitalSettingsPage() {
       setName(response.data.name || '');
       setDescription(response.data.description || '');
       setTimezone(response.data.timezone || 'UTC');
+<<<<<<< HEAD
       setYearsOfExcellence(response.data.years_of_excellence?.toString() || '25');
       setPatientsTreated(response.data.patients_treated || '50k+');
+=======
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
 
       const notificationsFromProfile = response.data.theme_settings?.notifications as NotificationPreferences | undefined;
 
@@ -72,8 +78,11 @@ export default function HospitalSettingsPage() {
       name,
       description,
       timezone,
+<<<<<<< HEAD
       years_of_excellence: parseInt(yearsOfExcellence) || 25,
       patients_treated: patientsTreated,
+=======
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
     });
     if (response.data) {
       setProfile(response.data);
@@ -130,7 +139,10 @@ export default function HospitalSettingsPage() {
 
       {activeTab === 'hospital-info' && (
         <Card className="p-6">
+<<<<<<< HEAD
           <h2 className="text-xl font-semibold text-neutral-dark mb-4">Hospital Information</h2>
+=======
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
           <div className="grid gap-4">
             <Input label="Hospital Name" value={name} onChange={(event) => setName(event.target.value)} />
             <Textarea
@@ -140,6 +152,7 @@ export default function HospitalSettingsPage() {
               onChange={(event) => setDescription(event.target.value)}
             />
             <Input label="Timezone" value={timezone} onChange={(event) => setTimezone(event.target.value)} />
+<<<<<<< HEAD
             
             <div className="border-t border-neutral-border pt-4 mt-2">
               <h3 className="text-lg font-semibold text-neutral-dark mb-3">Website Statistics</h3>
@@ -163,6 +176,8 @@ export default function HospitalSettingsPage() {
                 Note: Doctors and Departments count are automatically calculated from your data
               </p>
             </div>
+=======
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
           </div>
           <div className="mt-5 flex justify-end">
             <Button onClick={saveHospitalInfo} disabled={saving}>

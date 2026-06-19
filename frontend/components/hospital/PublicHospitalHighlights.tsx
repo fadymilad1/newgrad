@@ -56,8 +56,11 @@ export default async function PublicHospitalHighlights({
 }: PublicHospitalHighlightsProps) {
   let doctorsCount = 0;
   let departmentsCount = 0;
+<<<<<<< HEAD
   let yearsOfExcellence = '25';
   let patientsTreated = '50k+';
+=======
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
 
   try {
     const [doctors, departments] = await Promise.all([
@@ -66,6 +69,7 @@ export default async function PublicHospitalHighlights({
     ]);
     doctorsCount = doctors.length;
     departmentsCount = departments.length;
+<<<<<<< HEAD
     
     // Fetch hospital profile for statistics
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
@@ -78,6 +82,8 @@ export default async function PublicHospitalHighlights({
       yearsOfExcellence = profile.years_of_excellence?.toString() || '25';
       patientsTreated = profile.patients_treated || '50k+';
     }
+=======
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
   } catch {
     doctorsCount = 0;
     departmentsCount = 0;
@@ -92,8 +98,13 @@ export default async function PublicHospitalHighlights({
       label: 'Departments',
       value: departmentsCount > 0 ? `${departmentsCount}+` : '15+',
     },
+<<<<<<< HEAD
     { label: 'Years of Excellence', value: yearsOfExcellence },
     { label: 'Patients Treated', value: patientsTreated },
+=======
+    { label: 'Years of Excellence', value: '25' },
+    { label: 'Patients Treated', value: '50k+' },
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
   ];
 
   return (

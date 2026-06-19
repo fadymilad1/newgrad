@@ -201,6 +201,7 @@ export const hospitalAdminApi = {
     }
     await Promise.allSettled(requests);
   },
+<<<<<<< HEAD
 
   /** Sync schedules for a doctor - creates/updates based on provided schedule array */
   async syncDoctorSchedules(doctorId: string, schedules: { day_of_week: number; start_time: string; end_time: string; slot_duration_minutes: number; enabled: boolean }[]): Promise<void> {
@@ -320,4 +321,6 @@ export const hospitalAdminApi = {
     
     await Promise.allSettled(createRequests);
   },
+=======
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
 };

@@ -24,12 +24,15 @@ interface DoctorFormData {
   image: File | null;
   image_url: string;
   imagePreview: string;
+<<<<<<< HEAD
   availableDates: {
     date: string; // YYYY-MM-DD format
     start_time: string;
     end_time: string;
     slot_duration_minutes: number;
   }[];
+=======
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
 }
 
 interface ImportRow {
@@ -47,7 +50,10 @@ const EMPTY_FORM: DoctorFormData = {
   name: '', title: '', specialty: '', bio: '', email: '',
   experience: '', department: '', newDeptName: '', is_active: true,
   image: null, image_url: '', imagePreview: '',
+<<<<<<< HEAD
   availableDates: [],
+=======
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
 };
 
 // ─── Small helpers ────────────────────────────────────────────────────────────
@@ -198,6 +204,7 @@ function DoctorModal({ mode, initialData, departments, onClose, onSave, saving, 
             />
           </Field>
 
+<<<<<<< HEAD
           {/* Available Dates */}
           <div className="border-t border-neutral-border pt-4 mt-2">
             <h3 className="text-base font-semibold text-neutral-dark mb-3">Available Dates</h3>
@@ -335,6 +342,8 @@ function DoctorModal({ mode, initialData, departments, onClose, onSave, saving, 
             )}
           </div>
 
+=======
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
           <Field label="Department" required>
             <select className={INPUT} value={form.department} onChange={e => set('department', e.target.value)}>
               <option value="">-- Select department --</option>
@@ -626,7 +635,11 @@ export default function HospitalDoctorsPage() {
     const payload = buildDoctorPayload(form, deptId, bio, false);
     const res = await hospitalAdminApi.createDoctor(payload);
     if (res.error || !res.data) { setModalError(res.error ?? 'Failed to create doctor.'); setModalSaving(false); return; }
+<<<<<<< HEAD
     await hospitalAdminApi.syncDoctorAvailableDates(res.data.id, form.availableDates);
+=======
+    await hospitalAdminApi.createDefaultSchedules(res.data.id);
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
     await load();
     setAddOpen(false);
     setModalSaving(false);
@@ -644,7 +657,10 @@ export default function HospitalDoctorsPage() {
     const payload = buildDoctorPayload(form, deptId, bio, true);
     const res = await hospitalAdminApi.updateDoctor(editDoctor.id, payload);
     if (res.error) { setModalError(res.error); setModalSaving(false); return; }
+<<<<<<< HEAD
     await hospitalAdminApi.syncDoctorAvailableDates(editDoctor.id, form.availableDates);
+=======
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
     await load();
     setEditDoctor(null);
     setModalSaving(false);
@@ -740,6 +756,7 @@ export default function HospitalDoctorsPage() {
   const editInitial = (doc: Doctor): DoctorFormData => {
     const parts = (doc.bio ?? '').split(' • ');
     const resolvedImage = normalizeLogoUrl(doc.image_url_resolved || doc.image_url) || '';
+<<<<<<< HEAD
     
     // Convert existing schedules to available dates format
     // Note: This assumes schedules have a specific_date field from the backend
@@ -750,6 +767,8 @@ export default function HospitalDoctorsPage() {
       slot_duration_minutes: s.slot_duration_minutes,
     })).sort((a, b) => a.date.localeCompare(b.date));
     
+=======
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
     return {
       name: doc.name,
       title: parts[0] ?? '',
@@ -763,7 +782,10 @@ export default function HospitalDoctorsPage() {
       image: null,
       image_url: doc.image_url ?? '',
       imagePreview: resolvedImage,
+<<<<<<< HEAD
       availableDates,
+=======
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
     };
   };
 

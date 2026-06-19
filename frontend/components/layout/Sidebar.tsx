@@ -156,6 +156,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ userType, isOpen = true, onClo
     ...(currentUserType === 'hospital'
       ? [
           { label: 'My Website', icon: <FiGlobe />, href: '/dashboard/business-info' },
+<<<<<<< HEAD
           { label: 'Hospital Setup', icon: <FiLayout />, href: '/dashboard/hospital/setup' },
           { label: 'Customization', icon: <FiLayout />, href: '/dashboard/hospital/customization' },
           { label: 'Doctors', icon: <FiLayout />, href: '/dashboard/hospital/doctors' },
@@ -164,6 +165,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ userType, isOpen = true, onClo
           { label: 'Queue Management', icon: <FiPackage />, href: '/dashboard/hospital/queue' },
           { label: 'Notifications', icon: <FiMessageSquare />, href: '/dashboard/hospital/notifications' }, 
           { label: 'Settings', icon: <FiSettings />, href: '/dashboard/hospital/settings' },
+=======
+          { label: 'Appointments', icon: <FiShoppingCart />, href: '/dashboard/hospital/appointments' },
+          { label: 'Doctors', icon: <FiLayout />, href: '/dashboard/hospital/doctors' },
+          { label: 'Patients', icon: <FiInfo />, href: '/dashboard/hospital/patients' },
+          { label: 'Queue Management', icon: <FiPackage />, href: '/dashboard/hospital/queue' },
+          { label: 'Notifications', icon: <FiMessageSquare />, href: '/dashboard/hospital/notifications' },
+          { label: 'Emergency', icon: <FiGlobe />, href: '/dashboard/hospital/emergency' },
+          { label: 'Hospital Setup', icon: <FiLayout />, href: '/dashboard/hospital/setup' },
+          { label: 'Settings', icon: <FiSettings />, href: '/dashboard/hospital/settings' },
+          { label: 'Customization', icon: <FiLayout />, href: '/dashboard/hospital/customization' },
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
         ]
       : []),
     ...(currentUserType === 'pharmacy'

@@ -18,10 +18,13 @@ class HospitalProfile(models.Model):
     is_published = models.BooleanField(default=False)
     timezone = models.CharField(max_length=50, default='UTC', help_text="Timezone for the hospital, e.g. America/New_York")
     
+<<<<<<< HEAD
     # Statistics for public display
     years_of_excellence = models.IntegerField(default=25, help_text="Years the hospital has been operating")
     patients_treated = models.CharField(max_length=20, default='50k+', help_text="Total patients treated (e.g., '50k+', '100k+')")
     
+=======
+>>>>>>> b0ee34201894c7449dc12cd939e715132a409efb
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
