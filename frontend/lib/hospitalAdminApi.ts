@@ -225,7 +225,7 @@ export const hospitalAdminApi = {
         const existingSchedule = existingMap.get(schedule.day_of_week);
         if (existingSchedule) {
           requests.push(
-            fetch(`${API_BASE_URL}/hospital/admin/schedules/${existingSchedule.id}/`, {
+            fetch(`${API_BASE_URL}/hospital/admin/schedules/${(existingSchedule as any).id}/`, {
               method: 'DELETE',
               headers: hdrs,
               cache: 'no-store',
@@ -240,7 +240,7 @@ export const hospitalAdminApi = {
       if (existingSchedule) {
         // Update existing
         requests.push(
-          fetch(`${API_BASE_URL}/hospital/admin/schedules/${existingSchedule.id}/`, {
+          fetch(`${API_BASE_URL}/hospital/admin/schedules/${(existingSchedule as any).id}/`, {
             method: 'PATCH',
             headers: hdrs,
             body: JSON.stringify({

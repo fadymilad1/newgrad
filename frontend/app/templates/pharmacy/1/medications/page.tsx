@@ -179,7 +179,7 @@ function MedicationsPageContent() {
           setup.products
             .filter((p) => p.name?.trim())
             .map((p, idx) => ({
-              id: p.id?.toString() || `user-${idx}`,
+              id: (p as any).id?.toString() || `user-${idx}`,
               name: p.name,
               category: p.category || 'General',
               description: p.description,
